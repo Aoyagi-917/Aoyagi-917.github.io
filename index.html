@@ -97,6 +97,15 @@
             return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
         }
 
+        // 检查评论是否可以撤回（5分钟内）
+        function canWithdraw(timeString) {
+            const commentTime = new Date(timeString).getTime();
+            const now = new Date().getTime();
+            const fiveMinutes = 1000 * 60 * 1000; // 5分钟的毫秒数
+            
+            return now - commentTime <= fiveMinutes;
+        }
+
         // 渲染评论列表
         function renderComments() {
             const commentsContainer = document.getElementById('comments-container');
@@ -123,6 +132,9 @@
             div.className = `comment-shadow rounded-lg p-4 ${isReply ? 'reply-indent mt-3' : ''}`;
             div.dataset.id = comment.id;
 
+            // 检查是否可以撤回（5分钟内）
+            const withdrawable = canWithdraw(comment.time);
+            
             div.innerHTML = `
                 <div class="flex justify-between items-start mb-2">
                     <h3 class="font-semibold text-gray-800">${comment.author}</h3>
@@ -139,6 +151,12 @@
                         <i class="fa fa-reply"></i>
                         <span>回复</span>
                     </button>
+                    ${withdrawable ? `
+                    <button class="withdraw-btn flex items-center gap-1 text-gray-600 hover:text-red-500 transition-colors">
+                        <i class="fa fa-trash-o"></i>
+                        <span>撤回</span>
+                    </button>
+                    ` : ''}
                 </div>
                 <!-- 回复输入框（默认隐藏） -->
                 <div class="reply-form mt-3 hidden">
@@ -252,6 +270,33 @@
             renderComments();
         }
 
+        // 撤回评论/回复功能
+        function withdrawComment(commentId) {
+            if (!confirm('确定要撤回这条评论吗？')) {
+                return;
+            }
+
+            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
+
+            // 递归查找并删除评论
+            function findAndRemoveComment(commentList) {
+                for (let i = 0; i < commentList.length; i++) {
+                    if (commentList[i].id === commentId) {
+                        commentList.splice(i, 1);
+                        return true;
+                    }
+                    if (commentList[i].replies.length > 0 && findAndRemoveComment(commentList[i].replies)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            findAndRemoveComment(comments);
+            localStorage.setItem('comments', JSON.stringify(comments));
+            renderComments();
+        }
+
         // 事件监听
         document.addEventListener('DOMContentLoaded', () => {
             // 初始渲染评论
@@ -301,6 +346,12 @@
                     replyForm.classList.add('hidden');
                     replyForm.querySelector('.reply-content').value = '';
                     replyForm.querySelector('.reply-author').value = '';
+                }
+
+                // 撤回按钮
+                if (e.target.closest('.withdraw-btn')) {
+                    const commentId = e.target.closest('[data-id]').dataset.id;
+                    withdrawComment(commentId);
                 }
             });
         });
