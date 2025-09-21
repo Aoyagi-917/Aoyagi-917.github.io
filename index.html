@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本地评论系统</title>
+    <!-- 引入Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入Font Awesome图标（用于点赞和回复按钮） -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    
+    <!-- 配置Tailwind自定义颜色 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#64748b',
+                        neutral: '#f1f5f9',
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <!-- 自定义工具类 -->
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .comment-shadow {
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            }
+            .reply-indent {
+                margin-left: 1.5rem;
+                border-left: 2px solid #e2e8f0;
+                padding-left: 1rem;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen p-4 md:p-8">
+    <div class="max-w-3xl mx-auto bg-white rounded-xl p-6 shadow-md">
+        <h1 class="text-2xl font-bold text-gray-800 mb-6">评论区</h1>
+        
+        <!-- 评论输入区 -->
+        <div class="mb-8 bg-neutral rounded-lg p-4">
+            <div class="mb-4">
+                <label for="comment-content" class="block text-sm font-medium text-gray-700 mb-1">评论内容</label>
+                <textarea 
+                    id="comment-content" 
+                    rows="3" 
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    placeholder="分享你的想法..."></textarea>
+            </div>
+            <div class="mb-4">
+                <label for="comment-author" class="block text-sm font-medium text-gray-700 mb-1">昵称</label>
+                <input 
+                    type="text" 
+                    id="comment-author" 
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    placeholder="你的昵称">
+            </div>
+            <button id="submit-comment" class="bg-primary text-white px-4 py-2 rounded-md hover:bg-primary/90 transition-colors">
+                发布评论
+            </button>
+        </div>
+        
+        <!-- 评论列表 -->
+        <div id="comments-container" class="space-y-6">
+            <!-- 评论会通过JS动态生成 -->
+            <div class="text-center text-gray-500 py-8" id="empty-state">
+                <i class="fa fa-comment-o text-4xl mb-2 opacity-30"></i>
+                <p>还没有评论，快来抢沙发吧~</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 评论数据结构：{ id, content, author, time, likes, isLiked, replies[] }
+        // 初始化localStorage（如果没有数据则创建空数组）
+        if (!localStorage.getItem('comments')) {
+            localStorage.setItem('comments', JSON.stringify([]));
+        }
+
+        // 获取当前北京时间（处理时区）
+        function getBeijingTime() {
+            const now = new Date();
+            // 北京时间是UTC+8，计算时区偏移
+            const utcTime = now.getTime() + now.getTimezoneOffset() * 60000;
+            const beijingTime = new Date(utcTime + 8 * 3600000);
+            // 格式化：YYYY-MM-DD HH:MM:SS
+            return beijingTime.toISOString().slice(0, 19).replace('T', ' ');
+        }
+
+        // 生成唯一ID（用于评论和回复的标识）
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+        }
+
+        // 渲染评论列表
+        function renderComments() {
+            const commentsContainer = document.getElementById('comments-container');
+            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
+            const emptyState = document.getElementById('empty-state');
+
+            // 清空容器（保留empty-state）
+            Array.from(commentsContainer.children).forEach(child => {
+                if (child.id !== 'empty-state') child.remove();
+            });
+
+            // 显示/隐藏空状态
+            emptyState.style.display = comments.length === 0 ? 'block' : 'none';
+
+            // 渲染每条评论
+            comments.forEach(comment => {
+                commentsContainer.appendChild(createCommentElement(comment));
+            });
+        }
+
+        // 创建单条评论元素
+        function createCommentElement(comment, isReply = false) {
+            const div = document.createElement('div');
+            div.className = `comment-shadow rounded-lg p-4 ${isReply ? 'reply-indent mt-3' : ''}`;
+            div.dataset.id = comment.id;
+
+            div.innerHTML = `
+                <div class="flex justify-between items-start mb-2">
+                    <h3 class="font-semibold text-gray-800">${comment.author}</h3>
+                    <span class="text-xs text-gray-500">${comment.time}</span>
+                </div>
+                <p class="text-gray-700 mb-3">${comment.content}</p>
+                <div class="flex items-center gap-4 text-sm">
+                    <button class="like-btn flex items-center gap-1 text-gray-600 hover:text-red-500 transition-colors" 
+                            data-id="${comment.id}">
+                        <i class="fa ${comment.isLiked ? 'fa-heart text-red-500' : 'fa-heart-o'}"></i>
+                        <span>${comment.likes}</span>
+                    </button>
+                    <button class="reply-btn flex items-center gap-1 text-gray-600 hover:text-primary transition-colors">
+                        <i class="fa fa-reply"></i>
+                        <span>回复</span>
+                    </button>
+                </div>
+                <!-- 回复输入框（默认隐藏） -->
+                <div class="reply-form mt-3 hidden">
+                    <textarea class="reply-content w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                              rows="2" placeholder="回复 @${comment.author}..."></textarea>
+                    <div class="flex gap-2 mt-2">
+                        <input type="text" class="reply-author w-1/3 px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none"
+                               placeholder="你的昵称">
+                        <button class="submit-reply bg-primary/90 text-white px-3 py-1 rounded-md text-sm hover:bg-primary transition-colors">
+                            回复
+                        </button>
+                        <button class="cancel-reply text-gray-500 px-3 py-1 rounded-md text-sm hover:bg-gray-100 transition-colors">
+                            取消
+                        </button>
+                    </div>
+                </div>
+                <!-- 回复列表 -->
+                <div class="replies mt-4 space-y-2">
+                    ${comment.replies.map(reply => createCommentElement(reply, true).outerHTML).join('')}
+                </div>
+            `;
+
+            return div;
+        }
+
+        // 发布评论
+        function publishComment(content, author) {
+            if (!content.trim() || !author.trim()) {
+                alert('请输入评论内容和昵称');
+                return;
+            }
+
+            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
+            const newComment = {
+                id: generateId(),
+                content: content.trim(),
+                author: author.trim(),
+                time: getBeijingTime(),
+                likes: 0,
+                isLiked: false,
+                replies: []
+            };
+
+            comments.unshift(newComment); // 新评论放在最前面
+            localStorage.setItem('comments', JSON.stringify(comments));
+            renderComments();
+
+            // 清空输入框
+            document.getElementById('comment-content').value = '';
+            document.getElementById('comment-author').value = '';
+        }
+
+        // 发布回复
+        function publishReply(commentId, content, author, isReplyToReply = false) {
+            if (!content.trim() || !author.trim()) {
+                alert('请输入回复内容和昵称');
+                return;
+            }
+
+            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
+            const newReply = {
+                id: generateId(),
+                content: content.trim(),
+                author: author.trim(),
+                time: getBeijingTime(),
+                likes: 0,
+                isLiked: false,
+                replies: []
+            };
+
+            // 递归查找评论并添加回复
+            function findAndAddReply(commentList) {
+                for (let i = 0; i < commentList.length; i++) {
+                    if (commentList[i].id === commentId) {
+                        commentList[i].replies.unshift(newReply);
+                        return true;
+                    }
+                    if (commentList[i].replies.length > 0 && findAndAddReply(commentList[i].replies)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            findAndAddReply(comments);
+            localStorage.setItem('comments', JSON.stringify(comments));
+            renderComments();
+        }
+
+        // 点赞功能
+        function toggleLike(commentId) {
+            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
+
+            // 递归查找评论并切换点赞状态
+            function findAndToggleLike(commentList) {
+                for (let comment of commentList) {
+                    if (comment.id === commentId) {
+                        comment.likes += comment.isLiked ? -1 : 1;
+                        comment.isLiked = !comment.isLiked;
+                        return true;
+                    }
+                    if (comment.replies.length > 0 && findAndToggleLike(comment.replies)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            findAndToggleLike(comments);
+            localStorage.setItem('comments', JSON.stringify(comments));
+            renderComments();
+        }
+
+        // 事件监听
+        document.addEventListener('DOMContentLoaded', () => {
+            // 初始渲染评论
+            renderComments();
+
+            // 发布评论按钮
+            document.getElementById('submit-comment').addEventListener('click', () => {
+                const content = document.getElementById('comment-content').value;
+                const author = document.getElementById('comment-author').value;
+                publishComment(content, author);
+            });
+
+            // 点击事件委托（处理动态生成的元素）
+            document.getElementById('comments-container').addEventListener('click', (e) => {
+                // 点赞按钮
+                if (e.target.closest('.like-btn')) {
+                    const commentId = e.target.closest('.like-btn').dataset.id;
+                    toggleLike(commentId);
+                }
+
+                // 回复按钮
+                if (e.target.closest('.reply-btn')) {
+                    const commentEl = e.target.closest('[data-id]');
+                    const replyForm = commentEl.querySelector('.reply-form');
+                    // 隐藏其他所有回复框
+                    document.querySelectorAll('.reply-form').forEach(form => {
+                        if (form !== replyForm) form.classList.add('hidden');
+                    });
+                    // 切换当前回复框显示状态
+                    replyForm.classList.toggle('hidden');
+                }
+
+                // 取消回复
+                if (e.target.closest('.cancel-reply')) {
+                    e.target.closest('.reply-form').classList.add('hidden');
+                }
+
+                // 提交回复
+                if (e.target.closest('.submit-reply')) {
+                    const replyForm = e.target.closest('.reply-form');
+                    const commentEl = replyForm.closest('[data-id]');
+                    const commentId = commentEl.dataset.id;
+                    const content = replyForm.querySelector('.reply-content').value;
+                    const author = replyForm.querySelector('.reply-author').value;
+
+                    publishReply(commentId, content, author);
+                    replyForm.classList.add('hidden');
+                    replyForm.querySelector('.reply-content').value = '';
+                    replyForm.querySelector('.reply-author').value = '';
+                }
+            });
+        });
+    </script>
+</body>
+</html>
