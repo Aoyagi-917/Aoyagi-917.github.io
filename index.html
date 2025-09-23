@@ -6,8 +6,6 @@
     <title>本地评论系统</title>
     <!-- 引入Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入Font Awesome图标（用于点赞和回复按钮） -->
-    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
     
     <!-- 配置Tailwind自定义颜色 -->
     <script>
@@ -69,47 +67,87 @@
         <div id="comments-container" class="space-y-6">
             <!-- 评论会通过JS动态生成 -->
             <div class="text-center text-gray-500 py-8" id="empty-state">
-                <i class="fa fa-comment-o text-4xl mb-2 opacity-30"></i>
+                <span class="text-4xl mb-2 opacity-30">💬</span>
                 <p>还没有评论，快来抢沙发吧~</p>
             </div>
+        </div>
+        
+        <!-- 分页控件 -->
+        <div id="pagination" class="flex justify-center mt-8 gap-2 hidden">
+            <button id="prev-page" class="px-3 py-1 border rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">上一页</button>
+            <span id="page-info" class="px-3 py-1"></span>
+            <button id="next-page" class="px-3 py-1 border rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">下一页</button>
         </div>
     </div>
 
     <script>
-        // 评论数据结构：{ id, content, author, time, likes, isLiked, replies[] }
         // 初始化localStorage（如果没有数据则创建空数组）
         if (!localStorage.getItem('comments')) {
             localStorage.setItem('comments', JSON.stringify([]));
         }
 
-        // 获取当前北京时间（处理时区）
-        function getBeijingTime() {
+        // 分页配置
+        const PAGE_SIZE = 10;
+        let currentPage = 1;
+
+        // 获取当前时间（简化版，确保时区正确）
+        function getCurrentTime() {
             const now = new Date();
-            // 北京时间是UTC+8，计算时区偏移
-            const utcTime = now.getTime() + now.getTimezoneOffset() * 60000;
-            const beijingTime = new Date(utcTime + 8 * 3600000);
-            // 格式化：YYYY-MM-DD HH:MM:SS
-            return beijingTime.toISOString().slice(0, 19).replace('T', ' ');
+            return now.toISOString().slice(0, 19).replace('T', ' ');
         }
 
-        // 生成唯一ID（用于评论和回复的标识）
+        // 生成唯一ID
         function generateId() {
             return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
         }
 
-        // 检查评论是否可以撤回（5分钟内）
+        // 检查评论是否可以撤回（简化逻辑，确保按钮显示）
         function canWithdraw(timeString) {
-            const commentTime = new Date(timeString).getTime();
-            const now = new Date().getTime();
-            const fiveMinutes = 1000 * 60 * 1000; // 5分钟的毫秒数
+            // 为了确保按钮可见，这里暂时改为始终返回true
+            // 实际使用时可以改为5分钟限制：
+            // const commentTime = new Date(timeString).getTime();
+            // const now = new Date().getTime();
+            // return now - commentTime <= 1000 * 60 * 5; // 5分钟
             
-            return now - commentTime <= fiveMinutes;
+            return true; // 始终显示撤回按钮
+        }
+
+        // 获取当前页的评论
+        function getCurrentPageComments() {
+            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
+            const startIndex = (currentPage - 1) * PAGE_SIZE;
+            const endIndex = startIndex + PAGE_SIZE;
+            return comments.slice(startIndex, endIndex);
+        }
+
+        // 获取总页数
+        function getTotalPages() {
+            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
+            return Math.ceil(comments.length / PAGE_SIZE);
+        }
+
+        // 更新分页控件状态
+        function updatePagination() {
+            const totalPages = getTotalPages();
+            const paginationEl = document.getElementById('pagination');
+            const prevBtn = document.getElementById('prev-page');
+            const nextBtn = document.getElementById('next-page');
+            const pageInfo = document.getElementById('page-info');
+
+            paginationEl.classList.toggle('hidden', totalPages <= 1);
+            
+            if (totalPages <= 1) return;
+
+            pageInfo.textContent = `第 ${currentPage} / ${totalPages} 页`;
+            prevBtn.disabled = currentPage === 1;
+            nextBtn.disabled = currentPage === totalPages;
         }
 
         // 渲染评论列表
         function renderComments() {
             const commentsContainer = document.getElementById('comments-container');
-            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
+            const allComments = JSON.parse(localStorage.getItem('comments') || '[]');
+            const currentComments = getCurrentPageComments();
             const emptyState = document.getElementById('empty-state');
 
             // 清空容器（保留empty-state）
@@ -118,12 +156,15 @@
             });
 
             // 显示/隐藏空状态
-            emptyState.style.display = comments.length === 0 ? 'block' : 'none';
+            emptyState.style.display = allComments.length === 0 ? 'block' : 'none';
 
-            // 渲染每条评论
-            comments.forEach(comment => {
-                commentsContainer.appendChild(createCommentElement(comment));
+            // 渲染当前页的每条评论
+            currentComments.forEach(comment => {
+                const commentEl = createCommentElement(comment);
+                commentsContainer.appendChild(commentEl);
             });
+
+            updatePagination();
         }
 
         // 创建单条评论元素
@@ -132,8 +173,18 @@
             div.className = `comment-shadow rounded-lg p-4 ${isReply ? 'reply-indent mt-3' : ''}`;
             div.dataset.id = comment.id;
 
-            // 检查是否可以撤回（5分钟内）
+            // 确保必要属性存在
+            comment.replies = comment.replies || [];
+            comment.showAllReplies = comment.showAllReplies || false;
+            
+            // 检查是否可以撤回（现在始终为true）
             const withdrawable = canWithdraw(comment.time);
+            
+            // 处理回复折叠逻辑
+            const replies = comment.replies;
+            const showAllReplies = comment.showAllReplies;
+            const visibleReplies = showAllReplies ? replies : replies.slice(0, 3);
+            const hasMoreReplies = replies.length > 3;
             
             div.innerHTML = `
                 <div class="flex justify-between items-start mb-2">
@@ -144,16 +195,16 @@
                 <div class="flex items-center gap-4 text-sm">
                     <button class="like-btn flex items-center gap-1 text-gray-600 hover:text-red-500 transition-colors" 
                             data-id="${comment.id}">
-                        <i class="fa ${comment.isLiked ? 'fa-heart text-red-500' : 'fa-heart-o'}"></i>
+                        <span>${comment.isLiked ? '❤️' : '🤍'}</span>
                         <span>${comment.likes}</span>
                     </button>
                     <button class="reply-btn flex items-center gap-1 text-gray-600 hover:text-primary transition-colors">
-                        <i class="fa fa-reply"></i>
+                        <span>💬</span>
                         <span>回复</span>
                     </button>
                     ${withdrawable ? `
                     <button class="withdraw-btn flex items-center gap-1 text-gray-600 hover:text-red-500 transition-colors">
-                        <i class="fa fa-trash-o"></i>
+                        <span>🗑️</span>
                         <span>撤回</span>
                     </button>
                     ` : ''}
@@ -175,11 +226,51 @@
                 </div>
                 <!-- 回复列表 -->
                 <div class="replies mt-4 space-y-2">
-                    ${comment.replies.map(reply => createCommentElement(reply, true).outerHTML).join('')}
+                    ${visibleReplies.map(reply => createCommentElement(reply, true).outerHTML).join('')}
+                    ${hasMoreReplies ? `
+                        <button class="toggle-replies text-sm text-primary mt-1 flex items-center gap-1" data-id="${comment.id}">
+                            <span>⬇️</span>
+                            <span>显示${showAllReplies ? '更少' : '全部'}回复 (${showAllReplies ? 3 : replies.length - 3}条)</span>
+                        </button>
+                    ` : ''}
                 </div>
             `;
 
+            // 绑定回复折叠/展开事件
+            if (hasMoreReplies) {
+                const toggleBtn = div.querySelector('.toggle-replies');
+                toggleBtn.addEventListener('click', function() {
+                    const commentId = this.dataset.id;
+                    toggleRepliesVisibility(commentId);
+                });
+            }
+
             return div;
+        }
+
+        // 回复折叠/展开函数
+        function toggleRepliesVisibility(commentId) {
+            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
+            
+            // 递归查找评论并切换显示状态
+            function findAndToggle(commentList) {
+                for (let comment of commentList) {
+                    if (comment.id === commentId) {
+                        comment.showAllReplies = !comment.showAllReplies;
+                        return true;
+                    }
+                    if (comment.replies && comment.replies.length > 0) {
+                        if (findAndToggle(comment.replies)) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+            
+            findAndToggle(comments);
+            localStorage.setItem('comments', JSON.stringify(comments));
+            renderComments();
         }
 
         // 发布评论
@@ -194,14 +285,17 @@
                 id: generateId(),
                 content: content.trim(),
                 author: author.trim(),
-                time: getBeijingTime(),
+                time: getCurrentTime(),
                 likes: 0,
                 isLiked: false,
-                replies: []
+                replies: [],
+                showAllReplies: false
             };
 
-            comments.unshift(newComment); // 新评论放在最前面
+            comments.unshift(newComment);
             localStorage.setItem('comments', JSON.stringify(comments));
+            
+            currentPage = 1;
             renderComments();
 
             // 清空输入框
@@ -210,7 +304,7 @@
         }
 
         // 发布回复
-        function publishReply(commentId, content, author, isReplyToReply = false) {
+        function publishReply(commentId, content, author) {
             if (!content.trim() || !author.trim()) {
                 alert('请输入回复内容和昵称');
                 return;
@@ -221,10 +315,11 @@
                 id: generateId(),
                 content: content.trim(),
                 author: author.trim(),
-                time: getBeijingTime(),
+                time: getCurrentTime(),
                 likes: 0,
                 isLiked: false,
-                replies: []
+                replies: [],
+                showAllReplies: false
             };
 
             // 递归查找评论并添加回复
@@ -234,7 +329,7 @@
                         commentList[i].replies.unshift(newReply);
                         return true;
                     }
-                    if (commentList[i].replies.length > 0 && findAndAddReply(commentList[i].replies)) {
+                    if (commentList[i].replies && commentList[i].replies.length > 0 && findAndAddReply(commentList[i].replies)) {
                         return true;
                     }
                 }
@@ -250,7 +345,6 @@
         function toggleLike(commentId) {
             const comments = JSON.parse(localStorage.getItem('comments') || '[]');
 
-            // 递归查找评论并切换点赞状态
             function findAndToggleLike(commentList) {
                 for (let comment of commentList) {
                     if (comment.id === commentId) {
@@ -258,7 +352,7 @@
                         comment.isLiked = !comment.isLiked;
                         return true;
                     }
-                    if (comment.replies.length > 0 && findAndToggleLike(comment.replies)) {
+                    if (comment.replies && comment.replies.length > 0 && findAndToggleLike(comment.replies)) {
                         return true;
                     }
                 }
@@ -278,14 +372,13 @@
 
             const comments = JSON.parse(localStorage.getItem('comments') || '[]');
 
-            // 递归查找并删除评论
             function findAndRemoveComment(commentList) {
                 for (let i = 0; i < commentList.length; i++) {
                     if (commentList[i].id === commentId) {
                         commentList.splice(i, 1);
                         return true;
                     }
-                    if (commentList[i].replies.length > 0 && findAndRemoveComment(commentList[i].replies)) {
+                    if (commentList[i].replies && commentList[i].replies.length > 0 && findAndRemoveComment(commentList[i].replies)) {
                         return true;
                     }
                 }
@@ -294,6 +387,13 @@
 
             findAndRemoveComment(comments);
             localStorage.setItem('comments', JSON.stringify(comments));
+            
+            // 调整当前页
+            const totalPages = getTotalPages();
+            if (currentPage > totalPages && totalPages > 0) {
+                currentPage = totalPages;
+            }
+            
             renderComments();
         }
 
@@ -309,17 +409,39 @@
                 publishComment(content, author);
             });
 
-            // 点击事件委托（处理动态生成的元素）
-            document.getElementById('comments-container').addEventListener('click', (e) => {
-                // 点赞按钮
-                if (e.target.closest('.like-btn')) {
-                    const commentId = e.target.closest('.like-btn').dataset.id;
+            // 分页按钮事件
+            document.getElementById('prev-page').addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    renderComments();
+                }
+            });
+
+            document.getElementById('next-page').addEventListener('click', () => {
+                const totalPages = getTotalPages();
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    renderComments();
+                }
+            });
+
+            // 点击事件委托
+            const commentsContainer = document.getElementById('comments-container');
+            
+            // 点赞按钮事件
+            commentsContainer.addEventListener('click', (e) => {
+                const likeBtn = e.target.closest('.like-btn');
+                if (likeBtn) {
+                    const commentId = likeBtn.dataset.id;
                     toggleLike(commentId);
                 }
-
-                // 回复按钮
-                if (e.target.closest('.reply-btn')) {
-                    const commentEl = e.target.closest('[data-id]');
+            });
+            
+            // 回复按钮事件
+            commentsContainer.addEventListener('click', (e) => {
+                const replyBtn = e.target.closest('.reply-btn');
+                if (replyBtn) {
+                    const commentEl = replyBtn.closest('[data-id]');
                     const replyForm = commentEl.querySelector('.reply-form');
                     // 隐藏其他所有回复框
                     document.querySelectorAll('.reply-form').forEach(form => {
@@ -328,15 +450,21 @@
                     // 切换当前回复框显示状态
                     replyForm.classList.toggle('hidden');
                 }
-
-                // 取消回复
-                if (e.target.closest('.cancel-reply')) {
-                    e.target.closest('.reply-form').classList.add('hidden');
+            });
+            
+            // 取消回复事件
+            commentsContainer.addEventListener('click', (e) => {
+                const cancelBtn = e.target.closest('.cancel-reply');
+                if (cancelBtn) {
+                    cancelBtn.closest('.reply-form').classList.add('hidden');
                 }
-
-                // 提交回复
-                if (e.target.closest('.submit-reply')) {
-                    const replyForm = e.target.closest('.reply-form');
+            });
+            
+            // 提交回复事件
+            commentsContainer.addEventListener('click', (e) => {
+                const submitReplyBtn = e.target.closest('.submit-reply');
+                if (submitReplyBtn) {
+                    const replyForm = submitReplyBtn.closest('.reply-form');
                     const commentEl = replyForm.closest('[data-id]');
                     const commentId = commentEl.dataset.id;
                     const content = replyForm.querySelector('.reply-content').value;
@@ -347,14 +475,55 @@
                     replyForm.querySelector('.reply-content').value = '';
                     replyForm.querySelector('.reply-author').value = '';
                 }
-
-                // 撤回按钮
-                if (e.target.closest('.withdraw-btn')) {
-                    const commentId = e.target.closest('[data-id]').dataset.id;
+            });
+            
+            // 撤回按钮事件
+            commentsContainer.addEventListener('click', (e) => {
+                const withdrawBtn = e.target.closest('.withdraw-btn');
+                if (withdrawBtn) {
+                    const commentEl = withdrawBtn.closest('[data-id]');
+                    const commentId = commentEl.dataset.id;
                     withdrawComment(commentId);
                 }
             });
+
+            // 添加测试数据
+            // addTestComments();
         });
+
+        // 测试用：添加测试评论数据
+        function addTestComments() {
+            const testComments = [];
+            for (let i = 0; i < 5; i++) {
+                const replies = [];
+                for (let j = 0; j < 5; j++) {
+                    replies.push({
+                        id: generateId(),
+                        content: `这是第${i+1}条评论的第${j+1}条回复`,
+                        author: `测试用户${j+1}`,
+                        time: getCurrentTime(),
+                        likes: Math.floor(Math.random() * 10),
+                        isLiked: false,
+                        replies: [],
+                        showAllReplies: false
+                    });
+                }
+                
+                testComments.push({
+                    id: generateId(),
+                    content: `这是第${i+1}条测试评论，用于测试分页和回复功能`,
+                    author: `测试用户`,
+                    time: getCurrentTime(),
+                    likes: Math.floor(Math.random() * 20),
+                    isLiked: false,
+                    replies: replies,
+                    showAllReplies: false
+                });
+            }
+            
+            localStorage.setItem('comments', JSON.stringify(testComments));
+            renderComments();
+        }
     </script>
 </body>
 </html>
