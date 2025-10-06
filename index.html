@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>本地评论系统</title>
+    <title>评论系统</title>
     <!-- 引入Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -33,15 +33,59 @@
                 border-left: 2px solid #e2e8f0;
                 padding-left: 1rem;
             }
+            .glass-effect {
+                background: rgba(255, 255, 255, 0.85);
+                backdrop-filter: blur(8px);
+            }
+            .collapsed-content {
+                display: -webkit-box;
+                -webkit-line-clamp: 4;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+            }
+            .image-loading {
+                background: #f1f5f9;
+                animation: pulse 1.5s infinite;
+            }
+            @keyframes pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.5; }
+            }
+            .error-message {
+                color: #ef4444;
+                font-size: 0.875rem;
+                margin-top: 0.25rem;
+            }
         }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen p-4 md:p-8">
-    <div class="max-w-3xl mx-auto bg-white rounded-xl p-6 shadow-md">
+<body class="min-h-screen p-4 md:p-8 bg-cover bg-center bg-fixed" style="background-image: url('https://img.cdn1.vip/i/68e1c60914798_1759626761.webp');">
+    <div class="max-w-3xl mx-auto glass-effect rounded-xl p-6 shadow-lg">
         <h1 class="text-2xl font-bold text-gray-800 mb-6">评论区</h1>
         
+        <!-- 用户信息区 -->
+        <div class="flex items-center gap-4 mb-6">
+            <div class="relative">
+                <img id="user-avatar" 
+                     src="https://img.ixintu.com/download/jpg/20200901/3e9ce3813b7199ea9588eeb920f41208_512_512.jpg!bg" 
+                     alt="用户头像" 
+                     class="w-12 h-12 rounded-full object-cover border-2 border-primary image-loading"
+                     onload="this.classList.remove('image-loading')">
+                <label for="avatar-upload" class="absolute bottom-0 right-0 bg-primary text-white rounded-full w-5 h-5 flex items-center justify-center cursor-pointer text-xs">
+                    <span>✏️</span>
+                </label>
+                <input type="file" id="avatar-upload" accept="image/*" class="hidden">
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <span id="current-username" class="font-semibold"></span>
+                    <button id="change-username" class="text-primary text-sm hover:underline">修改</button>
+                </div>
+            </div>
+        </div>
+        
         <!-- 评论输入区 -->
-        <div class="mb-8 bg-neutral rounded-lg p-4">
+        <div class="mb-8 bg-neutral/90 rounded-lg p-4">
             <div class="mb-4">
                 <label for="comment-content" class="block text-sm font-medium text-gray-700 mb-1">评论内容</label>
                 <textarea 
@@ -49,18 +93,34 @@
                     rows="3" 
                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
                     placeholder="分享你的想法..."></textarea>
+                <div id="content-error" class="error-message hidden">请输入评论内容</div>
             </div>
+            
+            <!-- 文件上传区域 -->
             <div class="mb-4">
-                <label for="comment-author" class="block text-sm font-medium text-gray-700 mb-1">昵称</label>
-                <input 
-                    type="text" 
-                    id="comment-author" 
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    placeholder="你的昵称">
+                <label class="block text-sm font-medium text-gray-700 mb-1">附件</label>
+                <div class="flex gap-3">
+                    <div class="flex-1">
+                        <label class="flex items-center justify-center w-full p-3 border-2 border-dashed border-gray-300 rounded-md cursor-pointer bg-white/50 hover:bg-white transition-colors">
+                            <span class="text-sm text-gray-500">上传图片或文档 (≤10MB)</span>
+                            <input type="file" id="file-upload" class="hidden" 
+                                   accept="image/*,.pptx,.ppt,.docx,.doc,.txt">
+                        </label>
+                    </div>
+                    <div class="flex-1">
+                        <input type="text" id="link-upload" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
+                               placeholder="或输入链接">
+                    </div>
+                </div>
+                <div id="file-preview" class="mt-2 hidden"></div>
+                <div id="file-error" class="error-message hidden"></div>
             </div>
+            
             <button id="submit-comment" class="bg-primary text-white px-4 py-2 rounded-md hover:bg-primary/90 transition-colors">
                 发布评论
             </button>
+            <span id="posting-status" class="ml-2 text-sm text-red-500 hidden"></span>
         </div>
         
         <!-- 评论列表 -->
@@ -80,17 +140,127 @@
         </div>
     </div>
 
-    <script>
-        // 初始化localStorage（如果没有数据则创建空数组）
-        if (!localStorage.getItem('comments')) {
-            localStorage.setItem('comments', JSON.stringify([]));
-        }
+    <!-- 修改昵称模态框 -->
+    <div id="username-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg p-6 w-full max-w-sm">
+            <h3 class="text-lg font-semibold mb-4">修改昵称</h3>
+            <input type="text" id="new-username" class="w-full px-3 py-2 border border-gray-300 rounded-md mb-4" placeholder="新昵称">
+            <div class="flex justify-end gap-2">
+                <button id="cancel-username" class="px-4 py-2 border rounded-md hover:bg-gray-100">取消</button>
+                <button id="confirm-username" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90">确认</button>
+            </div>
+        </div>
+    </div>
 
+    <script>
+        // 配置
+        const DEFAULT_AVATAR = 'https://img.ixintu.com/download/jpg/20200901/3e9ce3813b7199ea9588eeb920f41208_512_512.jpg!bg';
+        const MAX_COMMENTS = 50; // 限制最大评论数量
+        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 限制文件大小为10MB
+        const MAX_IMAGE_SIZE = 200 * 1024; // 图片最大200KB
+        const IMAGE_QUALITY = 0.7; // 图片压缩质量
+        
+        // 用户数据初始化
+        function initUserData() {
+            let userData = JSON.parse(localStorage.getItem('userData') || '{}');
+            
+            // 检查是否是新用户
+            if (!userData.username) {
+                const username = prompt('欢迎来到评论区，请设置您的昵称：');
+                if (username && username.trim()) {
+                    userData.username = username.trim();
+                } else {
+                    userData.username = '匿名用户' + Math.floor(Math.random() * 1000);
+                }
+                userData.avatar = DEFAULT_AVATAR;
+            }
+            
+            // 初始化评论记录
+            if (!localStorage.getItem('commentHistory')) {
+                localStorage.setItem('commentHistory', JSON.stringify([]));
+            }
+            
+            // 初始化评论存储
+            initCommentStorage();
+            
+            localStorage.setItem('userData', JSON.stringify(userData));
+            return userData;
+        }
+        
+        // 初始化评论存储，确保不会超过限制
+        function initCommentStorage() {
+            if (!localStorage.getItem('comments')) {
+                localStorage.setItem('comments', JSON.stringify([]));
+                return;
+            }
+            
+            // 检查并清理旧评论
+            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
+            if (comments.length > MAX_COMMENTS) {
+                // 只保留最新的MAX_COMMENTS条评论
+                const trimmedComments = comments.slice(0, MAX_COMMENTS);
+                try {
+                    localStorage.setItem('comments', JSON.stringify(trimmedComments));
+                } catch (e) {
+                    console.warn('清理评论时发生错误，将尝试进一步减少存储:', e);
+                    // 进一步减少评论数量
+                    localStorage.setItem('comments', JSON.stringify(trimmedComments.slice(0, MAX_COMMENTS / 2)));
+                }
+            }
+        }
+        
+        // 安全地保存数据到localStorage
+        function safeSetItem(key, value) {
+            try {
+                localStorage.setItem(key, value);
+                return true;
+            } catch (e) {
+                if (e.name === 'QuotaExceededError') {
+                    console.error('存储配额不足，尝试清理旧数据:', e);
+                    
+                    // 尝试清理最旧的评论
+                    if (key === 'comments') {
+                        const comments = JSON.parse(value || '[]');
+                        // 如果还有评论可以清理
+                        if (comments.length > 1) {
+                            // 移除最旧的一条评论
+                            const newComments = comments.slice(0, comments.length - 1);
+                            return safeSetItem(key, JSON.stringify(newComments));
+                        }
+                    }
+                    
+                    // 尝试清理评论历史
+                    if (key !== 'commentHistory') {
+                        localStorage.setItem('commentHistory', JSON.stringify([]));
+                        return safeSetItem(key, value);
+                    }
+                }
+                return false;
+            }
+        }
+        
+        // 获取当前用户数据
+        function getUserData() {
+            return JSON.parse(localStorage.getItem('userData') || '{}');
+        }
+        
+        // 保存用户数据
+        function saveUserData(data) {
+            safeSetItem('userData', JSON.stringify(data));
+        }
+        
         // 分页配置
         const PAGE_SIZE = 10;
         let currentPage = 1;
+        let currentUser = initUserData();
 
-        // 获取当前时间（简化版，确保时区正确）
+        // 更新用户信息显示
+        function updateUserDisplay() {
+            document.getElementById('current-username').textContent = currentUser.username;
+            document.getElementById('user-avatar').src = currentUser.avatar || DEFAULT_AVATAR;
+        }
+
+        // 获取当前时间
         function getCurrentTime() {
             const now = new Date();
             return now.toISOString().slice(0, 19).replace('T', ' ');
@@ -101,15 +271,44 @@
             return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
         }
 
-        // 检查评论是否可以撤回（简化逻辑，确保按钮显示）
-        function canWithdraw(timeString) {
-            // 为了确保按钮可见，这里暂时改为始终返回true
-            // 实际使用时可以改为5分钟限制：
-            // const commentTime = new Date(timeString).getTime();
-            // const now = new Date().getTime();
-            // return now - commentTime <= 1000 * 60 * 5; // 5分钟
+        // 检查是否可以发布评论（防刷屏）
+        function canPostComment() {
+            const history = JSON.parse(localStorage.getItem('commentHistory') || '[]');
+            const now = new Date().getTime();
+            const twoMinutes = 2 * 60 * 1000; // 2分钟的毫秒数
             
-            return true; // 始终显示撤回按钮
+            // 过滤掉2分钟前的记录
+            const recentHistory = history.filter(timestamp => now - timestamp < twoMinutes);
+            
+            // 如果最近2分钟内发布超过7条，返回剩余等待时间
+            if (recentHistory.length >= 7) {
+                const oldestInWindow = Math.min(...recentHistory);
+                const waitTime = twoMinutes - (now - oldestInWindow);
+                return { canPost: false, waitTime: Math.ceil(waitTime / 1000) };
+            }
+            
+            return { canPost: true };
+        }
+
+        // 记录评论发布时间
+        function recordCommentTime() {
+            const history = JSON.parse(localStorage.getItem('commentHistory') || '[]');
+            // 只保留最近100条记录
+            if (history.length > 100) {
+                history.splice(0, history.length - 100);
+            }
+            history.push(new Date().getTime());
+            safeSetItem('commentHistory', JSON.stringify(history));
+        }
+
+        // 检查是否是评论作者
+        function isCommentAuthor(commentAuthor) {
+            return commentAuthor === currentUser.username;
+        }
+
+        // 检查评论是否可以撤回（只有作者可以撤回）
+        function canWithdraw(comment) {
+            return isCommentAuthor(comment.author);
         }
 
         // 获取当前页的评论
@@ -143,6 +342,13 @@
             nextBtn.disabled = currentPage === totalPages;
         }
 
+        // 检查评论是否需要折叠
+        function needsCollapsing(content) {
+            // 简单判断：超过4行或特定字符数
+            const lineCount = (content.match(/\n/g) || []).length + 1;
+            return lineCount > 4 || content.length > 200;
+        }
+
         // 渲染评论列表
         function renderComments() {
             const commentsContainer = document.getElementById('comments-container');
@@ -167,18 +373,67 @@
             updatePagination();
         }
 
+        // 创建附件显示元素
+        function createAttachmentsElement(attachments) {
+            if (!attachments || attachments.length === 0) return '';
+            
+            let html = '<div class="mt-2 space-y-1">';
+            attachments.forEach(attach => {
+                if (attach.type === 'file') {
+                    const isImage = attach.mimeType.startsWith('image/');
+                    // 为图片添加加载状态和错误处理
+                    const imageAttrs = isImage ? `
+                        class="w-16 h-16 object-cover rounded image-loading"
+                        onload="this.classList.remove('image-loading')"
+                        onerror="this.src='${DEFAULT_AVATAR}'; this.classList.remove('image-loading')"
+                    ` : '';
+                    
+                    html += `
+                        <div class="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                            ${isImage ? 
+                                `<img src="${attach.url}" alt="附件图片" ${imageAttrs}>` : 
+                                `<span class="text-gray-500">📄</span>`
+                            }
+                            <div>
+                                <div class="text-sm">${attach.name}</div>
+                                <a href="${attach.url}" target="_blank" class="text-xs text-primary hover:underline">查看</a>
+                            </div>
+                        </div>
+                    `;
+                } else if (attach.type === 'link') {
+                    // 检查是否是图片链接
+                    const isImageLink = attach.url.match(/\.(jpeg|jpg|gif|png|webp)$/i);
+                    html += `
+                        <div class="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                            ${isImageLink ? 
+                                `<img src="${attach.url}" alt="链接图片" class="w-16 h-16 object-cover rounded image-loading"
+                                    onload="this.classList.remove('image-loading')"
+                                    onerror="this.src='${DEFAULT_AVATAR}'; this.classList.remove('image-loading')">` : 
+                                `<span class="text-gray-500">🔗</span>`
+                            }
+                            <a href="${attach.url}" target="_blank" class="text-sm text-primary hover:underline break-all">${attach.url}</a>
+                        </div>
+                    `;
+                }
+            });
+            html += '</div>';
+            return html;
+        }
+
         // 创建单条评论元素
         function createCommentElement(comment, isReply = false) {
             const div = document.createElement('div');
-            div.className = `comment-shadow rounded-lg p-4 ${isReply ? 'reply-indent mt-3' : ''}`;
+            div.className = `comment-shadow rounded-lg p-4 bg-white/90 ${isReply ? 'reply-indent mt-3' : ''}`;
             div.dataset.id = comment.id;
 
             // 确保必要属性存在
             comment.replies = comment.replies || [];
             comment.showAllReplies = comment.showAllReplies || false;
+            comment.attachments = comment.attachments || [];
+            comment.showFullContent = comment.showFullContent || false;
             
-            // 检查是否可以撤回（现在始终为true）
-            const withdrawable = canWithdraw(comment.time);
+            // 检查是否可以撤回
+            const withdrawable = canWithdraw(comment);
             
             // 处理回复折叠逻辑
             const replies = comment.replies;
@@ -186,12 +441,36 @@
             const visibleReplies = showAllReplies ? replies : replies.slice(0, 3);
             const hasMoreReplies = replies.length > 3;
             
+            // 处理长评论折叠
+            const contentNeedsCollapsing = needsCollapsing(comment.content);
+            const showFullContent = comment.showFullContent;
+            
+            // 头像加载处理
+            const avatarSrc = comment.avatar || DEFAULT_AVATAR;
+            
             div.innerHTML = `
-                <div class="flex justify-between items-start mb-2">
-                    <h3 class="font-semibold text-gray-800">${comment.author}</h3>
-                    <span class="text-xs text-gray-500">${comment.time}</span>
+                <div class="flex gap-3 mb-2">
+                    <img src="${avatarSrc}" 
+                         alt="${comment.author}的头像" 
+                         class="w-8 h-8 rounded-full object-cover image-loading"
+                         onload="this.classList.remove('image-loading')"
+                         onerror="this.src='${DEFAULT_AVATAR}'; this.classList.remove('image-loading')">
+                    <div class="flex-1">
+                        <div class="flex justify-between items-start">
+                            <h3 class="font-semibold text-gray-800">${comment.author}</h3>
+                            <span class="text-xs text-gray-500">${comment.time}</span>
+                        </div>
+                        <div class="text-gray-700 mb-2 ${contentNeedsCollapsing && !showFullContent ? 'collapsed-content' : ''}">
+                            ${comment.content}
+                        </div>
+                        ${contentNeedsCollapsing ? `
+                            <button class="toggle-content text-sm text-primary mb-2" data-id="${comment.id}">
+                                ${showFullContent ? '收起' : '展开全部'}
+                            </button>
+                        ` : ''}
+                        ${createAttachmentsElement(comment.attachments)}
+                    </div>
                 </div>
-                <p class="text-gray-700 mb-3">${comment.content}</p>
                 <div class="flex items-center gap-4 text-sm">
                     <button class="like-btn flex items-center gap-1 text-gray-600 hover:text-red-500 transition-colors" 
                             data-id="${comment.id}">
@@ -213,9 +492,14 @@
                 <div class="reply-form mt-3 hidden">
                     <textarea class="reply-content w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                               rows="2" placeholder="回复 @${comment.author}..."></textarea>
+                    <div class="mt-2">
+                        <label class="text-xs text-gray-500">添加附件</label>
+                        <input type="file" class="reply-file-upload hidden" accept="image/*,.pptx,.ppt,.docx,.doc,.txt">
+                        <label for="reply-file-${comment.id}" class="text-xs text-primary cursor-pointer hover:underline">上传文件</label>
+                        <input type="text" class="reply-link ml-2 px-2 py-1 border border-gray-300 rounded text-xs w-48" placeholder="或输入链接">
+                        <input type="file" id="reply-file-${comment.id}" class="reply-file-upload hidden" accept="image/*,.pptx,.ppt,.docx,.doc,.txt">
+                    </div>
                     <div class="flex gap-2 mt-2">
-                        <input type="text" class="reply-author w-1/3 px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none"
-                               placeholder="你的昵称">
                         <button class="submit-reply bg-primary/90 text-white px-3 py-1 rounded-md text-sm hover:bg-primary transition-colors">
                             回复
                         </button>
@@ -245,7 +529,41 @@
                 });
             }
 
+            // 绑定内容折叠/展开事件
+            if (contentNeedsCollapsing) {
+                const toggleBtn = div.querySelector('.toggle-content');
+                toggleBtn.addEventListener('click', function() {
+                    const commentId = this.dataset.id;
+                    toggleContentVisibility(commentId);
+                });
+            }
+
             return div;
+        }
+
+        // 内容折叠/展开函数
+        function toggleContentVisibility(commentId) {
+            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
+            
+            // 递归查找评论并切换显示状态
+            function findAndToggle(commentList) {
+                for (let comment of commentList) {
+                    if (comment.id === commentId) {
+                        comment.showFullContent = !comment.showFullContent;
+                        return true;
+                    }
+                    if (comment.replies && comment.replies.length > 0) {
+                        if (findAndToggle(comment.replies)) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+            
+            findAndToggle(comments);
+            safeSetItem('comments', JSON.stringify(comments));
+            renderComments();
         }
 
         // 回复折叠/展开函数
@@ -269,99 +587,316 @@
             }
             
             findAndToggle(comments);
-            localStorage.setItem('comments', JSON.stringify(comments));
+            safeSetItem('comments', JSON.stringify(comments));
             renderComments();
+        }
+
+        // 压缩图片
+        function compressImage(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.src = e.target.result;
+                    
+                    img.onload = function() {
+                        // 创建canvas元素
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        
+                        // 计算压缩后的尺寸（保持比例）
+                        let width = img.width;
+                        let height = img.height;
+                        const maxDim = 800; // 最大尺寸限制
+                        
+                        if (width > height && width > maxDim) {
+                            height = (height * maxDim) / width;
+                            width = maxDim;
+                        } else if (height > maxDim) {
+                            width = (width * maxDim) / height;
+                            height = maxDim;
+                        }
+                        
+                        canvas.width = width;
+                        canvas.height = height;
+                        
+                        // 绘制图片
+                        ctx.drawImage(img, 0, 0, width, height);
+                        
+                        // 转换为base64，设置质量
+                        canvas.toBlob((blob) => {
+                            const compressedFile = new File([blob], file.name, { 
+                                type: file.type,
+                                lastModified: Date.now()
+                            });
+                            
+                            // 读取压缩后的文件
+                            const compressedReader = new FileReader();
+                            compressedReader.readAsDataURL(compressedFile);
+                            compressedReader.onload = function(event) {
+                                resolve(event.target.result);
+                            };
+                        }, file.type, IMAGE_QUALITY);
+                    };
+                    
+                    img.onerror = function() {
+                        reject('图片加载失败');
+                    };
+                };
+                
+                reader.onerror = function() {
+                    reject('文件读取失败');
+                };
+            });
+        }
+
+        // 处理文件上传
+        function handleFileUpload(file) {
+            return new Promise((resolve, reject) => {
+                // 检查文件大小
+                if (file.size > MAX_FILE_SIZE) {
+                    reject(`文件大小不能超过${MAX_FILE_SIZE / (1024 * 1024)}MB`);
+                    return;
+                }
+                
+                // 对于图片，压缩后转为dataURL
+                if (file.type.startsWith('image/')) {
+                    // 如果图片过大，先压缩
+                    if (file.size > MAX_IMAGE_SIZE) {
+                        compressImage(file)
+                            .then(compressedDataUrl => {
+                                resolve({
+                                    type: 'file',
+                                    name: file.name,
+                                    mimeType: file.type,
+                                    url: compressedDataUrl
+                                });
+                            })
+                            .catch(error => {
+                                reject(`图片处理失败: ${error}`);
+                            });
+                    } else {
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            resolve({
+                                type: 'file',
+                                name: file.name,
+                                mimeType: file.type,
+                                url: e.target.result
+                            });
+                        };
+                        reader.onerror = function() {
+                            reject('图片读取失败，请重试');
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                } else {
+                    // 对于文档，仅保存文件名和类型
+                    resolve({
+                        type: 'file',
+                        name: file.name,
+                        mimeType: file.type,
+                        url: '#file-' + generateId()
+                    });
+                }
+            });
         }
 
         // 发布评论
-        function publishComment(content, author) {
-            if (!content.trim() || !author.trim()) {
-                alert('请输入评论内容和昵称');
-                return;
-            }
-
-            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
-            const newComment = {
-                id: generateId(),
-                content: content.trim(),
-                author: author.trim(),
-                time: getCurrentTime(),
-                likes: 0,
-                isLiked: false,
-                replies: [],
-                showAllReplies: false
-            };
-
-            comments.unshift(newComment);
-            localStorage.setItem('comments', JSON.stringify(comments));
+        async function publishComment() {
+            // 清除之前的错误提示
+            document.getElementById('content-error').classList.add('hidden');
+            document.getElementById('file-error').classList.add('hidden');
+            document.getElementById('posting-status').classList.add('hidden');
             
-            currentPage = 1;
-            renderComments();
-
-            // 清空输入框
-            document.getElementById('comment-content').value = '';
-            document.getElementById('comment-author').value = '';
-        }
-
-        // 发布回复
-        function publishReply(commentId, content, author) {
-            if (!content.trim() || !author.trim()) {
-                alert('请输入回复内容和昵称');
-                return;
-            }
-
-            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
-            const newReply = {
-                id: generateId(),
-                content: content.trim(),
-                author: author.trim(),
-                time: getCurrentTime(),
-                likes: 0,
-                isLiked: false,
-                replies: [],
-                showAllReplies: false
-            };
-
-            // 递归查找评论并添加回复
-            function findAndAddReply(commentList) {
-                for (let i = 0; i < commentList.length; i++) {
-                    if (commentList[i].id === commentId) {
-                        commentList[i].replies.unshift(newReply);
-                        return true;
-                    }
-                    if (commentList[i].replies && commentList[i].replies.length > 0 && findAndAddReply(commentList[i].replies)) {
-                        return true;
-                    }
-                }
+            const content = document.getElementById('comment-content').value;
+            const link = document.getElementById('link-upload').value.trim();
+            const fileInput = document.getElementById('file-upload');
+            
+            // 验证评论内容
+            if (!content.trim()) {
+                document.getElementById('content-error').classList.remove('hidden');
                 return false;
             }
 
-            findAndAddReply(comments);
-            localStorage.setItem('comments', JSON.stringify(comments));
-            renderComments();
+            // 检查防刷屏限制
+            const postCheck = canPostComment();
+            if (!postCheck.canPost) {
+                const statusEl = document.getElementById('posting-status');
+                statusEl.textContent = `评论过于频繁，请等待${postCheck.waitTime}秒后再试`;
+                statusEl.classList.remove('hidden');
+                return false;
+            }
+
+            try {
+                const attachments = [];
+                
+                // 处理文件上传
+                if (fileInput.files.length > 0) {
+                    try {
+                        const fileData = await handleFileUpload(fileInput.files[0]);
+                        attachments.push(fileData);
+                    } catch (error) {
+                        document.getElementById('file-error').textContent = error;
+                        document.getElementById('file-error').classList.remove('hidden');
+                        return false;
+                    }
+                }
+                
+                // 处理链接
+                if (link) {
+                    attachments.push({
+                        type: 'link',
+                        url: link
+                    });
+                }
+
+                const comments = JSON.parse(localStorage.getItem('comments') || '[]');
+                const newComment = {
+                    id: generateId(),
+                    content: content.trim(),
+                    author: currentUser.username,
+                    avatar: currentUser.avatar,
+                    time: getCurrentTime(),
+                    likes: 0,
+                    isLiked: false,
+                    replies: [],
+                    showAllReplies: false,
+                    showFullContent: false,
+                    attachments: attachments || []
+                };
+
+                // 添加新评论到开头
+                comments.unshift(newComment);
+                
+                // 限制评论总数
+                if (comments.length > MAX_COMMENTS) {
+                    comments.pop(); // 移除最旧的评论
+                }
+
+                // 尝试保存评论
+                const saveSuccess = safeSetItem('comments', JSON.stringify(comments));
+                if (!saveSuccess) {
+                    throw new Error('存储空间不足，无法发布评论');
+                }
+                
+                // 记录评论时间
+                recordCommentTime();
+                
+                currentPage = 1;
+                renderComments();
+
+                // 清空输入框
+                document.getElementById('comment-content').value = '';
+                document.getElementById('link-upload').value = '';
+                document.getElementById('file-preview').classList.add('hidden');
+                fileInput.value = '';
+                
+                return true;
+            } catch (error) {
+                console.error('发布评论失败:', error);
+                const statusEl = document.getElementById('posting-status');
+                statusEl.textContent = error.message;
+                statusEl.classList.remove('hidden');
+                return false;
+            }
+        }
+
+        // 发布回复
+        async function publishReply(commentId, content, attachments) {
+            if (!content.trim()) {
+                alert('请输入回复内容');
+                return;
+            }
+
+            // 检查防刷屏限制
+            const postCheck = canPostComment();
+            if (!postCheck.canPost) {
+                alert(`评论过于频繁，请等待${postCheck.waitTime}秒后再试`);
+                return;
+            }
+
+            try {
+                const comments = JSON.parse(localStorage.getItem('comments') || '[]');
+                const newReply = {
+                    id: generateId(),
+                    content: content.trim(),
+                    author: currentUser.username,
+                    avatar: currentUser.avatar,
+                    time: getCurrentTime(),
+                    likes: 0,
+                    isLiked: false,
+                    replies: [],
+                    showAllReplies: false,
+                    showFullContent: false,
+                    attachments: attachments || []
+                };
+
+                // 递归查找评论并添加回复
+                function findAndAddReply(commentList) {
+                    for (let i = 0; i < commentList.length; i++) {
+                        if (commentList[i].id === commentId) {
+                            commentList[i].replies.unshift(newReply);
+                            return true;
+                        }
+                        if (commentList[i].replies && commentList[i].replies.length > 0 && findAndAddReply(commentList[i].replies)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                findAndAddReply(comments);
+                
+                // 限制评论总数
+                if (comments.length > MAX_COMMENTS) {
+                    comments.pop(); // 移除最旧的评论
+                }
+
+                // 尝试保存评论
+                const saveSuccess = safeSetItem('comments', JSON.stringify(comments));
+                if (!saveSuccess) {
+                    throw new Error('存储空间不足，无法发布回复');
+                }
+                
+                // 记录评论时间
+                recordCommentTime();
+                
+                renderComments();
+            } catch (error) {
+                console.error('发布回复失败:', error);
+                alert(error.message);
+            }
         }
 
         // 点赞功能
         function toggleLike(commentId) {
-            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
+            try {
+                const comments = JSON.parse(localStorage.getItem('comments') || '[]');
 
-            function findAndToggleLike(commentList) {
-                for (let comment of commentList) {
-                    if (comment.id === commentId) {
-                        comment.likes += comment.isLiked ? -1 : 1;
-                        comment.isLiked = !comment.isLiked;
-                        return true;
+                function findAndToggleLike(commentList) {
+                    for (let comment of commentList) {
+                        if (comment.id === commentId) {
+                            comment.likes += comment.isLiked ? -1 : 1;
+                            comment.isLiked = !comment.isLiked;
+                            return true;
+                        }
+                        if (comment.replies && comment.replies.length > 0 && findAndToggleLike(comment.replies)) {
+                            return true;
+                        }
                     }
-                    if (comment.replies && comment.replies.length > 0 && findAndToggleLike(comment.replies)) {
-                        return true;
-                    }
+                    return false;
                 }
-                return false;
-            }
 
-            findAndToggleLike(comments);
-            localStorage.setItem('comments', JSON.stringify(comments));
-            renderComments();
+                findAndToggleLike(comments);
+                safeSetItem('comments', JSON.stringify(comments));
+                renderComments();
+            } catch (error) {
+                console.error('点赞失败:', error);
+                alert('操作失败，请稍后重试');
+            }
         }
 
         // 撤回评论/回复功能
@@ -370,43 +905,155 @@
                 return;
             }
 
-            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
+            try {
+                const comments = JSON.parse(localStorage.getItem('comments') || '[]');
 
-            function findAndRemoveComment(commentList) {
-                for (let i = 0; i < commentList.length; i++) {
-                    if (commentList[i].id === commentId) {
-                        commentList.splice(i, 1);
-                        return true;
+                function findAndRemoveComment(commentList) {
+                    for (let i = 0; i < commentList.length; i++) {
+                        if (commentList[i].id === commentId) {
+                            commentList.splice(i, 1);
+                            return true;
+                        }
+                        if (commentList[i].replies && commentList[i].replies.length > 0 && findAndRemoveComment(commentList[i].replies)) {
+                            return true;
+                        }
                     }
-                    if (commentList[i].replies && commentList[i].replies.length > 0 && findAndRemoveComment(commentList[i].replies)) {
-                        return true;
-                    }
+                    return false;
                 }
+
+                findAndRemoveComment(comments);
+                safeSetItem('comments', JSON.stringify(comments));
+                
+                // 调整当前页
+                const totalPages = getTotalPages();
+                if (currentPage > totalPages && totalPages > 0) {
+                    currentPage = totalPages;
+                }
+                
+                renderComments();
+            } catch (error) {
+                console.error('撤回评论失败:', error);
+                alert('操作失败，请稍后重试');
+            }
+        }
+
+        // 更换头像
+        function changeAvatar(file) {
+            return new Promise((resolve, reject) => {
+                if (!file.type.startsWith('image/')) {
+                    reject('请上传图片文件');
+                    return;
+                }
+                
+                // 限制头像大小
+                if (file.size > MAX_IMAGE_SIZE) {
+                    // 压缩头像
+                    compressImage(file)
+                        .then(compressedDataUrl => {
+                            currentUser.avatar = compressedDataUrl;
+                            saveUserData(currentUser);
+                            updateUserDisplay();
+                            resolve();
+                        })
+                        .catch(error => {
+                            reject(`头像处理失败: ${error}`);
+                        });
+                } else {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        currentUser.avatar = e.target.result;
+                        saveUserData(currentUser);
+                        updateUserDisplay();
+                        resolve();
+                    };
+                    reader.onerror = function() {
+                        reject('头像读取失败，请重试');
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+        }
+
+        // 修改昵称
+        function changeUsername(newName) {
+            if (!newName || !newName.trim()) {
+                alert('请输入有效的昵称');
                 return false;
             }
-
-            findAndRemoveComment(comments);
-            localStorage.setItem('comments', JSON.stringify(comments));
             
-            // 调整当前页
-            const totalPages = getTotalPages();
-            if (currentPage > totalPages && totalPages > 0) {
-                currentPage = totalPages;
-            }
-            
-            renderComments();
+            currentUser.username = newName.trim();
+            saveUserData(currentUser);
+            updateUserDisplay();
+            return true;
         }
 
         // 事件监听
         document.addEventListener('DOMContentLoaded', () => {
+            // 初始化用户显示
+            updateUserDisplay();
+            
             // 初始渲染评论
             renderComments();
 
             // 发布评论按钮
-            document.getElementById('submit-comment').addEventListener('click', () => {
-                const content = document.getElementById('comment-content').value;
-                const author = document.getElementById('comment-author').value;
-                publishComment(content, author);
+            document.getElementById('submit-comment').addEventListener('click', publishComment);
+            
+            // 添加键盘事件支持
+            document.getElementById('comment-content').addEventListener('keydown', (e) => {
+                // Ctrl+Enter 发布评论
+                if (e.ctrlKey && e.key === 'Enter') {
+                    e.preventDefault();
+                    publishComment();
+                }
+            });
+
+            // 文件上传预览
+            document.getElementById('file-upload').addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                try {
+                    const fileData = await handleFileUpload(file);
+                    const previewEl = document.getElementById('file-preview');
+                    
+                    // 图片预览处理
+                    let previewContent = '';
+                    if (fileData.mimeType.startsWith('image/')) {
+                        previewContent = `
+                            <div class="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                                <img src="${fileData.url}" alt="预览" class="w-16 h-16 object-cover rounded image-loading"
+                                    onload="this.classList.remove('image-loading')"
+                                    onerror="this.src='${DEFAULT_AVATAR}'; this.classList.remove('image-loading')">
+                                <div class="flex-1">
+                                    <div class="text-sm">${fileData.name}</div>
+                                    <button id="remove-file" class="text-xs text-red-500 hover:underline">移除</button>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        previewContent = `
+                            <div class="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                                <span class="text-gray-500">📄</span>
+                                <div class="flex-1">
+                                    <div class="text-sm">${fileData.name}</div>
+                                    <button id="remove-file" class="text-xs text-red-500 hover:underline">移除</button>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    
+                    previewEl.innerHTML = previewContent;
+                    previewEl.classList.remove('hidden');
+                    
+                    // 移除文件
+                    document.getElementById('remove-file').addEventListener('click', () => {
+                        previewEl.classList.add('hidden');
+                        document.getElementById('file-upload').value = '';
+                    });
+                } catch (error) {
+                    document.getElementById('file-error').textContent = error;
+                    document.getElementById('file-error').classList.remove('hidden');
+                }
             });
 
             // 分页按钮事件
@@ -422,6 +1069,37 @@
                 if (currentPage < totalPages) {
                     currentPage++;
                     renderComments();
+                }
+            });
+
+            // 头像上传
+            document.getElementById('avatar-upload').addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    try {
+                        await changeAvatar(file);
+                        alert('头像更新成功');
+                    } catch (error) {
+                        alert(error);
+                    }
+                    e.target.value = '';
+                }
+            });
+
+            // 修改昵称相关事件
+            document.getElementById('change-username').addEventListener('click', () => {
+                document.getElementById('username-modal').classList.remove('hidden');
+                document.getElementById('new-username').value = currentUser.username;
+            });
+
+            document.getElementById('cancel-username').addEventListener('click', () => {
+                document.getElementById('username-modal').classList.add('hidden');
+            });
+
+            document.getElementById('confirm-username').addEventListener('click', () => {
+                const newName = document.getElementById('new-username').value;
+                if (changeUsername(newName)) {
+                    document.getElementById('username-modal').classList.add('hidden');
                 }
             });
 
@@ -460,20 +1138,52 @@
                 }
             });
             
+            // 回复文件上传
+            commentsContainer.addEventListener('change', async (e) => {
+                const fileInput = e.target.closest('.reply-file-upload');
+                if (fileInput && fileInput.files.length > 0) {
+                    try {
+                        const fileData = await handleFileUpload(fileInput.files[0]);
+                        const replyForm = fileInput.closest('.reply-form');
+                        replyForm.dataset.attachment = JSON.stringify([fileData]);
+                        alert('文件已添加');
+                    } catch (error) {
+                        alert(error);
+                    }
+                    fileInput.value = '';
+                }
+            });
+            
             // 提交回复事件
-            commentsContainer.addEventListener('click', (e) => {
+            commentsContainer.addEventListener('click', async (e) => {
                 const submitReplyBtn = e.target.closest('.submit-reply');
                 if (submitReplyBtn) {
                     const replyForm = submitReplyBtn.closest('.reply-form');
                     const commentEl = replyForm.closest('[data-id]');
                     const commentId = commentEl.dataset.id;
                     const content = replyForm.querySelector('.reply-content').value;
-                    const author = replyForm.querySelector('.reply-author').value;
+                    const link = replyForm.querySelector('.reply-link').value.trim();
+                    
+                    const attachments = [];
+                    
+                    // 获取文件附件
+                    if (replyForm.dataset.attachment) {
+                        attachments.push(...JSON.parse(replyForm.dataset.attachment));
+                        delete replyForm.dataset.attachment;
+                    }
+                    
+                    // 处理链接
+                    if (link) {
+                        attachments.push({
+                            type: 'link',
+                            url: link
+                        });
+                    }
 
-                    publishReply(commentId, content, author);
+                    await publishReply(commentId, content, attachments);
                     replyForm.classList.add('hidden');
                     replyForm.querySelector('.reply-content').value = '';
-                    replyForm.querySelector('.reply-author').value = '';
+                    replyForm.querySelector('.reply-link').value = '';
                 }
             });
             
@@ -486,44 +1196,7 @@
                     withdrawComment(commentId);
                 }
             });
-
-            // 添加测试数据
-            // addTestComments();
         });
-
-        // 测试用：添加测试评论数据
-        function addTestComments() {
-            const testComments = [];
-            for (let i = 0; i < 5; i++) {
-                const replies = [];
-                for (let j = 0; j < 5; j++) {
-                    replies.push({
-                        id: generateId(),
-                        content: `这是第${i+1}条评论的第${j+1}条回复`,
-                        author: `测试用户${j+1}`,
-                        time: getCurrentTime(),
-                        likes: Math.floor(Math.random() * 10),
-                        isLiked: false,
-                        replies: [],
-                        showAllReplies: false
-                    });
-                }
-                
-                testComments.push({
-                    id: generateId(),
-                    content: `这是第${i+1}条测试评论，用于测试分页和回复功能`,
-                    author: `测试用户`,
-                    time: getCurrentTime(),
-                    likes: Math.floor(Math.random() * 20),
-                    isLiked: false,
-                    replies: replies,
-                    showAllReplies: false
-                });
-            }
-            
-            localStorage.setItem('comments', JSON.stringify(testComments));
-            renderComments();
-        }
     </script>
 </body>
 </html>
