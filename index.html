@@ -3,11 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>评论系统</title>
-    <!-- 引入Tailwind CSS -->
+    <title>一起评论φ(゜▽゜*)♪</title>
+    <!-- 注意：在生产环境中，建议使用Tailwind CLI或PostCSS插件而非CDN -->
+    <!-- 参考：https://tailwindcss.com/docs/installation -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
     
-    <!-- 配置Tailwind自定义颜色 -->
     <script>
         tailwind.config = {
             theme: {
@@ -16,101 +18,442 @@
                         primary: '#3b82f6',
                         secondary: '#64748b',
                         neutral: '#f1f5f9',
+                        danger: '#ef4444',
+                        success: '#10b981',
+                        warning: '#f59e0b',
                     },
                 }
             }
         }
     </script>
     
-    <!-- 自定义工具类 -->
     <style type="text/tailwindcss">
         @layer utilities {
-            .comment-shadow {
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            .comment-shadow { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
+            .reply-indent { margin-left: 1.5rem; border-left: 2px solid #e2e8f0; padding-left: 1rem; }
+            .glass-effect { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(8px); }
+            .collapsed-content { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+            .image-loading { background: #f1f5f9; animation: pulse 1.5s infinite; }
+            @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+            .error-message { color: #ef4444; font-size: 0.875rem; margin-top: 0.25rem; }
+            .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(255, 255, 255, 0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
+            .admin-badge { background-color: #3b82f6; color: white; font-size: 0.7rem; padding: 0 3px; border-radius: 3px; margin-left: 5px; }
+            .pinned-badge { background-color: #f59e0b; color: white; font-size: 0.7rem; padding: 0 3px; border-radius: 3px; margin-right: 5px; }
+            .clock { width: 120px; height: 120px; border-radius: 50%; border: 4px solid #3b82f6; position: relative; margin: 0 auto; }
+            .clock-hand { position: absolute; background-color: #3b82f6; transform-origin: bottom center; border-radius: 5px; }
+            .hour-hand { width: 4px; height: 30px; top: 30px; left: 58px; }
+            .minute-hand { width: 3px; height: 40px; top: 20px; left: 58.5px; }
+            .second-hand { width: 2px; height: 45px; top: 15px; left: 59px; background-color: #ef4444; }
+            .clock-center { width: 10px; height: 10px; background-color: #3b82f6; border-radius: 50%; position: absolute; top: 55px; left: 55px; }
+            .music-player { background-color: rgba(255, 255, 255, 0.9); border-radius: 8px; padding: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+            .song-info { margin-bottom: 10px; }
+            .song-title { font-weight: bold; color: #3b82f6; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .song-artist { font-size: 0.85rem; color: #64748b; }
+            .lyrics-container { 
+                height: 180px; 
+                overflow-y: auto; /* 允许垂直滚动 */
+                position: relative; 
+                margin: 10px 0; 
+                text-align: center;
+                scrollbar-width: thin; /* 细滚动条 */
+                scrollbar-color: #3b82f6 #f1f5f9; /* 滚动条颜色 */
             }
-            .reply-indent {
-                margin-left: 1.5rem;
-                border-left: 2px solid #e2e8f0;
-                padding-left: 1rem;
+            /* 自定义滚动条 */
+            .lyrics-container::-webkit-scrollbar {
+                width: 4px;
             }
-            .glass-effect {
-                background: rgba(255, 255, 255, 0.85);
-                backdrop-filter: blur(8px);
-            }
-            .collapsed-content {
-                display: -webkit-box;
-                -webkit-line-clamp: 4;
-                -webkit-box-orient: vertical;
-                overflow: hidden;
-            }
-            .image-loading {
+            .lyrics-container::-webkit-scrollbar-track {
                 background: #f1f5f9;
-                animation: pulse 1.5s infinite;
+                border-radius: 10px;
             }
-            @keyframes pulse {
-                0%, 100% { opacity: 1; }
-                50% { opacity: 0.5; }
+            .lyrics-container::-webkit-scrollbar-thumb {
+                background: #3b82f6;
+                border-radius: 10px;
             }
-            .error-message {
-                color: #ef4444;
-                font-size: 0.875rem;
-                margin-top: 0.25rem;
+            .lyrics-container::-webkit-scrollbar-thumb:hover {
+                background: #2563eb;
+            }
+            .lyrics-scroll { 
+                position: relative; 
+                width: 100%; 
+                padding: 20px 0; /* 增加上下内边距，方便滚动到顶部和底部 */
+            }
+            .lyric-line { 
+                padding: 4px 0; 
+                font-size: 0.9rem; 
+                color: #4b5563; 
+                transition: all 0.3s ease; 
+                min-height: 24px; /* 确保行高一致 */
+            }
+            .lyric-main { transition: all 0.3s ease; }
+            .lyric-translation { 
+                font-size: 0.8rem; 
+                color: #64748b; 
+                margin-top: 2px; 
+                transition: all 0.3s ease; 
+            }
+            .lyric-line.active .lyric-main { 
+                color: #3b82f6; 
+                font-weight: bold; 
+                transform: scale(1.05); /* 活跃歌词稍微放大 */
+            }
+            .lyric-line.active .lyric-translation { color: #3b82f6; }
+            .lyric-line:hover { 
+                cursor: pointer; 
+                background-color: rgba(59, 130, 246, 0.05); 
+            }
+            .audio-duration { display: flex; justify-content: space-between; font-size: 0.75rem; color: #64748b; margin-top: 5px; }
+            .announcement { background-color: #fff3cd; border-left: 4px solid #f59e0b; padding: 10px 15px; border-radius: 4px; margin-bottom: 1rem; }
+            .banned-user { color: #ef4444; font-weight: bold; }
+            .admin-panel { position: fixed; top: 0; right: -400px; width: 400px; height: 100%; background-color: white; box-shadow: -2px 0 10px rgba(0,0,0,0.1); transition: right 0.3s ease; z-index: 1000; overflow-y: auto; }
+            .admin-panel.open { right: 0; }
+            .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 999; display: none; }
+            .overlay.show { display: block; }
+            .modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); z-index: 1001; display: none; }
+            .modal.show { display: block; }
+            .avatar-cropper { width: 150px; height: 150px; overflow: hidden; border-radius: 50%; position: relative; margin: 0 auto; }
+            .cropper-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 2px dashed rgba(255,255,255,0.5); border-radius: 50%; pointer-events: none; }
+            .image-viewer { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.9); display: none; justify-content: center; align-items: center; z-index: 2000; }
+            .image-viewer.show { display: flex; }
+            .image-viewer-content { max-width: 90%; max-height: 90%; position: relative; }
+            .image-viewer img { max-width: 100%; max-height: 80vh; object-contain: contain; }
+            .close-image-viewer { position: absolute; top: -30px; right: -30px; color: white; font-size: 24px; cursor: pointer; }
+            /* 进度条拖动相关样式 */
+            .progress-handle { 
+                position: absolute; 
+                width: 12px; 
+                height: 12px; 
+                background-color: #3b82f6; 
+                border-radius: 50%; 
+                top: 50%; 
+                transform: translateY(-50%); 
+                box-shadow: 0 0 3px rgba(0,0,0,0.2);
+                cursor: pointer;
+                transition: all 0.1s ease;
+            }
+            .progress-handle:hover {
+                transform: translateY(-50%) scale(1.2);
+                box-shadow: 0 0 5px rgba(59, 130, 246, 0.5);
+            }
+            .progress-container {
+                position: relative;
             }
         }
     </style>
 </head>
 <body class="min-h-screen p-4 md:p-8 bg-cover bg-center bg-fixed" style="background-image: url('https://img.cdn1.vip/i/68e1c60914798_1759626761.webp');">
-    <div class="max-w-3xl mx-auto glass-effect rounded-xl p-6 shadow-lg">
-        <h1 class="text-2xl font-bold text-gray-800 mb-6">评论区</h1>
-        
-        <!-- 用户信息区 -->
+    <div id="image-viewer" class="image-viewer">
+        <div class="image-viewer-content">
+            <span id="close-image-viewer" class="close-image-viewer"><i class="fa fa-times"></i></span>
+            <img id="viewer-image" src="" alt="图片预览">
+        </div>
+    </div>
+
+    <div id="loading-screen" class="loading-overlay">
+        <img src="https://ts1.tc.mm.bing.net/th/id/R-C.0e8edbcaef3e22718de6334626ed6d25?rik=WfHQlKKTgiOM1w&riu=http%3a%2f%2fstatic.oschina.net%2fuploads%2fimg%2f201409%2f26073947_j9gz.gif&ehk=5gMLa5lnbAj7tWHNOvjcM2szRlUEB69ynI9ggjRimVE%3d&risl=&pid=ImgRaw&r=0" alt="加载中" class="w-24 h-24 mb-4">
+        <div class="flex items-center">
+            <span class="text-primary font-bold text-xl">正在加载</span>
+            <span class="text-gray-500 ml-2" id="loading-time">(预计打开需要 <span id="estimated-time">0</span> 分钟)</span>
+        </div>
+    </div>
+
+    <div id="admin-panel" class="admin-panel">
+        <div class="p-4 border-b">
+            <h2 class="text-xl font-bold">管理员面板</h2>
+            <button id="close-admin-panel" class="absolute top-4 right-4 text-gray-500 hover:text-gray-700">
+                <i class="fa fa-times"></i>
+            </button>
+        </div>
+        <div class="p-4">
+            <div class="mb-6">
+                <h3 class="font-semibold mb-2">统计信息</h3>
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="bg-gray-100 p-2 rounded">
+                        <p class="text-sm text-gray-500">注册用户</p>
+                        <p class="text-lg font-bold" id="total-users">0</p>
+                    </div>
+                    <div class="bg-gray-100 p-2 rounded">
+                        <p class="text-sm text-gray-500">在线用户</p>
+                        <p class="text-lg font-bold" id="online-users">0</p>
+                    </div>
+                    <div class="bg-gray-100 p-2 rounded">
+                        <p class="text-sm text-gray-500">总评论数</p>
+                        <p class="text-lg font-bold" id="total-comments">0</p>
+                    </div>
+                    <div class="bg-gray-100 p-2 rounded">
+                        <p class="text-sm text-gray-500">待审核举报</p>
+                        <p class="text-lg font-bold" id="pending-reports">0</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mb-6">
+                <h3 class="font-semibold mb-2">用户管理</h3>
+                <div class="mb-2">
+                    <input type="text" id="search-user" placeholder="搜索用户..." class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                </div>
+                <div class="max-h-60 overflow-y-auto border border-gray-200 rounded-md p-2" id="user-list"></div>
+            </div>
+            
+            <div class="mb-6">
+                <h3 class="font-semibold mb-2">举报管理</h3>
+                <div class="max-h-80 overflow-y-auto border border-gray-200 rounded-md p-2" id="report-list"></div>
+            </div>
+            
+            <div class="mb-6">
+                <h3 class="font-semibold mb-2">公告管理</h3>
+                <textarea id="announcement-content" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md mb-2" placeholder="输入公告内容..."></textarea>
+                <div class="flex gap-2">
+                    <button id="save-announcement" class="bg-primary text-white px-3 py-1 rounded text-sm">
+                        <i class="fa fa-save mr-1"></i>保存公告
+                    </button>
+                    <button id="delete-announcement" class="bg-danger text-white px-3 py-1 rounded text-sm">
+                        <i class="fa fa-trash mr-1"></i>删除公告
+                    </button>
+                </div>
+            </div>
+
+            <div class="border-t pt-4 mt-4">
+                <button id="admin-logout" class="w-full bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200">
+                    <i class="fa fa-sign-out mr-1"></i>退出登录
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="overlay" class="overlay"></div>
+
+    <div id="report-modal" class="modal">
+        <h3 class="text-lg font-semibold mb-3">举报评论</h3>
+        <p class="text-sm text-gray-600 mb-2">评论内容:</p>
+        <p class="text-sm bg-gray-100 p-2 rounded mb-3" id="report-comment-content"></p>
+        <div class="mb-3">
+            <label class="block text-sm font-medium mb-1">举报原因</label>
+            <textarea id="report-reason" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="请输入举报原因..."></textarea>
+        </div>
+        <div class="flex justify-end gap-2">
+            <button id="cancel-report" class="px-3 py-1 border rounded text-sm">
+                <i class="fa fa-times mr-1"></i>取消
+            </button>
+            <button id="submit-report" class="px-3 py-1 bg-danger text-white rounded text-sm">
+                <i class="fa fa-flag mr-1"></i>提交举报
+            </button>
+        </div>
+    </div>
+
+    <div id="review-report-modal" class="modal">
+        <h3 class="text-lg font-semibold mb-3">审核举报</h3>
+        <p class="text-sm text-gray-600 mb-1">被举报评论:</p>
+        <p class="text-sm bg-gray-100 p-2 rounded mb-3" id="review-comment-content"></p>
+        <p class="text-sm text-gray-600 mb-1">举报原因:</p>
+        <p class="text-sm bg-gray-100 p-2 rounded mb-1" id="review-report-reason"></p>
+        <p class="text-sm text-gray-600 mb-3">举报用户: <span id="review-reporter"></span></p>
+        <div class="flex justify-end gap-2">
+            <button id="review-no-issue" class="px-3 py-1 border rounded text-sm">
+                <i class="fa fa-check mr-1"></i>无问题
+            </button>
+            <button id="review-keep" class="px-3 py-1 bg-warning text-white rounded text-sm">
+                <i class="fa fa-eye mr-1"></i>保留评论
+            </button>
+            <button id="review-delete" class="px-3 py-1 bg-danger text-white rounded text-sm">
+                <i class="fa fa-trash mr-1"></i>删除评论
+            </button>
+        </div>
+    </div>
+
+    <div id="user-modal" class="modal">
+        <h3 class="text-lg font-semibold mb-3" id="user-modal-title">用户详情</h3>
+        <div id="user-modal-content"></div>
+    </div>
+
+    <div id="login-modal" class="modal">
+        <h3 class="text-lg font-semibold mb-3">用户登录</h3>
+        <div class="mb-3">
+            <label class="block text-sm font-medium mb-1">学号 (格式: 25+班级+序号)</label>
+            <input type="text" id="student-id" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="例如: 251638">
+        </div>
+        <div class="mb-3">
+            <label class="block text-sm font-medium mb-1">真实姓名</label>
+            <input type="text" id="real-name" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="请输入真实姓名">
+        </div>
+        <div class="mb-3">
+            <button id="submit-login" class="w-full bg-primary text-white px-3 py-2 rounded">
+                <i class="fa fa-sign-in mr-1"></i>登录/注册
+            </button>
+        </div>
+        <div class="text-center">
+            <button id="admin-login-link" class="text-primary text-sm hover:underline">
+                我是管理员?
+            </button>
+        </div>
+    </div>
+
+    <div id="admin-login-modal" class="modal">
+        <h3 class="text-lg font-semibold mb-3">管理员登录</h3>
+        <div class="mb-3">
+            <label class="block text-sm font-medium mb-1">管理员密码</label>
+            <input type="password" id="admin-password" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+        </div>
+        <div class="mb-3">
+            <button id="submit-admin-login" class="w-full bg-primary text-white px-3 py-2 rounded">
+                <i class="fa fa-lock mr-1"></i>登录
+            </button>
+        </div>
+        <div class="text-center">
+            <button id="back-to-user-login" class="text-gray-500 text-sm hover:underline">
+                返回用户登录
+            </button>
+        </div>
+    </div>
+
+    <div id="username-modal" class="modal">
+        <h3 class="text-lg font-semibold mb-3">设置昵称</h3>
+        <p class="text-sm text-gray-500 mb-3">可以不输入，默认使用"学号+真实姓名"</p>
+        <div class="mb-3">
+            <input type="text" id="new-username" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="设置您的昵称">
+        </div>
+        <div class="mb-4">
+            <label class="block text-sm font-medium mb-2">上传头像</label>
+            <div class="avatar-cropper mb-2">
+                <img id="avatar-preview" src="https://img.ixintu.com/download/jpg/20200901/3e9ce3813b7199ea9588eeb920f41208_512_512.jpg!bg" alt="预览" class="w-full h-full object-cover">
+                <div class="cropper-overlay"></div>
+            </div>
+            <label class="flex items-center justify-center w-full p-2 border border-dashed border-gray-300 rounded-md cursor-pointer bg-gray-50 hover:bg-gray-100 text-sm">
+                <i class="fa fa-upload mr-1"></i> 选择图片
+                <input type="file" id="avatar-upload-modal" accept="image/*" class="hidden">
+            </label>
+        </div>
+        <div class="flex justify-end">
+            <button id="confirm-username" class="px-4 py-2 bg-primary text-white rounded">
+                <i class="fa fa-check mr-1"></i>确认
+            </button>
+        </div>
+    </div>
+
+    <div class="max-w-4xl mx-auto glass-effect rounded-xl p-6 shadow-lg">
+        <div class="flex justify-between items-center mb-4">
+            <h1 class="text-2xl font-bold text-gray-800">评论区</h1>
+            <div id="time-widget" class="text-right">
+                <!-- 数字时钟 -->
+                <div id="digital-clock" class="font-mono font-bold text-primary"></div>
+                <!-- 模拟时钟 (默认隐藏) -->
+                <div id="analog-clock" class="clock hidden">
+                    <div class="clock-hand hour-hand" id="hour-hand"></div>
+                    <div class="clock-hand minute-hand" id="minute-hand"></div>
+                    <div class="clock-hand second-hand" id="second-hand"></div>
+                    <div class="clock-center"></div>
+                </div>
+                <button id="toggle-clock" class="text-xs text-gray-500 hover:text-primary mt-1">
+                    <i class="fa fa-refresh mr-1"></i>切换时钟样式
+                </button>
+            </div>
+        </div>
+
+        <div id="announcement" class="announcement hidden">
+            <h3 class="font-semibold flex items-center"><i class="fa fa-bullhorn mr-2"></i>公告</h3>
+            <p id="announcement-text" class="text-sm mt-1"></p>
+        </div>
+
+        <div id="banned-users-section" class="mb-6 hidden">
+            <h3 class="font-semibold text-danger mb-2 flex items-center"><i class="fa fa-exclamation-triangle mr-2"></i>违规用户公示</h3>
+            <div id="banned-users-list" class="text-sm"></div>
+        </div>
+
+        <div class="music-player mb-6">
+            <h3 class="font-semibold mb-2 flex items-center"><i class="fa fa-music mr-2"></i>背景音乐</h3>
+            
+            <div class="song-info">
+                <div class="song-title" id="song-title">未播放</div>
+                <div class="song-artist" id="song-artist">未知艺术家</div>
+            </div>
+            
+            <div class="lyrics-container" id="lyrics-container">
+                <div class="lyrics-scroll" id="lyrics-scroll">
+                    <div class="lyric-line">
+                        <div class="lyric-main">请播放歌曲以显示歌词</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-2 mb-2">
+                <button id="prev-song" class="p-1 text-gray-600 hover:text-primary"><i class="fa fa-step-backward"></i></button>
+                <button id="play-pause" class="p-1 text-gray-600 hover:text-primary"><i class="fa fa-play"></i></button>
+                <button id="next-song" class="p-1 text-gray-600 hover:text-primary"><i class="fa fa-step-forward"></i></button>
+                <span id="current-song" class="text-sm flex-1 truncate hidden">未播放</span>
+            </div>
+            
+            <div class="w-full bg-gray-200 rounded-full h-1.5 mb-2 cursor-pointer relative" id="progress-container">
+                <div id="progress-bar" class="bg-primary h-1.5 rounded-full" style="width: 0%"></div>
+                <div id="progress-handle" class="progress-handle" style="left: 0%"></div>
+            </div>
+            <div class="audio-duration">
+                <span id="current-time">00:00</span>
+                <span id="total-time">00:00</span>
+            </div>
+        </div>
+
+        <div class="flex justify-center mb-6">
+            <div class="flex items-center border rounded-md overflow-hidden">
+                <button id="sort-time" class="px-3 py-1 bg-primary text-white text-sm">
+                    <i class="fa fa-clock-o mr-1"></i>时间排序
+                </button>
+                <button id="sort-likes" class="px-3 py-1 bg-gray-100 text-gray-700 text-sm hover:bg-gray-200">
+                    <i class="fa fa-thumbs-up mr-1"></i>点赞排序
+                </button>
+            </div>
+        </div>
+
+        <div id="admin-button" class="mb-6 hidden">
+            <button id="open-admin-panel" class="bg-primary/90 text-white px-4 py-2 rounded text-sm hover:bg-primary">
+                <i class="fa fa-cog mr-1"></i>管理员面板
+            </button>
+        </div>
+
         <div class="flex items-center gap-4 mb-6">
             <div class="relative">
-                <img id="user-avatar" 
-                     src="https://img.ixintu.com/download/jpg/20200901/3e9ce3813b7199ea9588eeb920f41208_512_512.jpg!bg" 
-                     alt="用户头像" 
-                     class="w-12 h-12 rounded-full object-cover border-2 border-primary image-loading"
-                     onload="this.classList.remove('image-loading')">
+                <img id="user-avatar" src="https://img.ixintu.com/download/jpg/20200901/3e9ce3813b7199ea9588eeb920f41208_512_512.jpg!bg" alt="用户头像" class="w-12 h-12 rounded-full object-cover border-2 border-primary image-loading" onload="this.classList.remove('image-loading')">
                 <label for="avatar-upload" class="absolute bottom-0 right-0 bg-primary text-white rounded-full w-5 h-5 flex items-center justify-center cursor-pointer text-xs">
-                    <span>✏️</span>
+                    <i class="fa fa-pencil"></i>
                 </label>
                 <input type="file" id="avatar-upload" accept="image/*" class="hidden">
             </div>
             <div>
                 <div class="flex items-center gap-2">
                     <span id="current-username" class="font-semibold"></span>
-                    <button id="change-username" class="text-primary text-sm hover:underline">修改</button>
+                    <span id="admin-badge" class="admin-badge hidden">管理员</span>
+                    <button id="change-username" class="text-primary text-sm hover:underline">
+                        <i class="fa fa-edit mr-1"></i>修改
+                    </button>
+                    <button id="user-logout" class="text-gray-500 text-sm hover:text-gray-700">
+                        <i class="fa fa-sign-out mr-1"></i>退出
+                    </button>
                 </div>
+                <div id="posting-restriction" class="text-danger text-xs hidden"></div>
             </div>
         </div>
-        
-        <!-- 评论输入区 -->
+
         <div class="mb-8 bg-neutral/90 rounded-lg p-4">
             <div class="mb-4">
                 <label for="comment-content" class="block text-sm font-medium text-gray-700 mb-1">评论内容</label>
-                <textarea 
-                    id="comment-content" 
-                    rows="3" 
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    placeholder="分享你的想法..."></textarea>
+                <textarea id="comment-content" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="分享你的想法..."></textarea>
                 <div id="content-error" class="error-message hidden">请输入评论内容</div>
             </div>
             
-            <!-- 文件上传区域 -->
             <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-1">附件</label>
                 <div class="flex gap-3">
                     <div class="flex-1">
                         <label class="flex items-center justify-center w-full p-3 border-2 border-dashed border-gray-300 rounded-md cursor-pointer bg-white/50 hover:bg-white transition-colors">
+                            <i class="fa fa-file-image-o mr-2"></i>
                             <span class="text-sm text-gray-500">上传图片或文档 (≤10MB)</span>
-                            <input type="file" id="file-upload" class="hidden" 
-                                   accept="image/*,.pptx,.ppt,.docx,.doc,.txt">
+                            <input type="file" id="file-upload" class="hidden" accept="image/*,.pptx,.ppt,.docx,.doc,.txt">
                         </label>
                     </div>
                     <div class="flex-1">
-                        <input type="text" id="link-upload" 
-                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
-                               placeholder="或输入链接">
+                        <div class="relative">
+                            <i class="fa fa-link absolute left-3 top-3 text-gray-400"></i>
+                            <input type="text" id="link-upload" class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="或输入链接">
+                        </div>
                     </div>
                 </div>
                 <div id="file-preview" class="mt-2 hidden"></div>
@@ -118,1085 +461,1560 @@
             </div>
             
             <button id="submit-comment" class="bg-primary text-white px-4 py-2 rounded-md hover:bg-primary/90 transition-colors">
-                发布评论
+                <i class="fa fa-paper-plane mr-1"></i>发布评论
             </button>
             <span id="posting-status" class="ml-2 text-sm text-red-500 hidden"></span>
         </div>
         
-        <!-- 评论列表 -->
         <div id="comments-container" class="space-y-6">
-            <!-- 评论会通过JS动态生成 -->
             <div class="text-center text-gray-500 py-8" id="empty-state">
                 <span class="text-4xl mb-2 opacity-30">💬</span>
                 <p>还没有评论，快来抢沙发吧~</p>
             </div>
         </div>
         
-        <!-- 分页控件 -->
         <div id="pagination" class="flex justify-center mt-8 gap-2 hidden">
-            <button id="prev-page" class="px-3 py-1 border rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">上一页</button>
+            <button id="prev-page" class="px-3 py-1 border rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">
+                <i class="fa fa-chevron-left mr-1"></i>上一页
+            </button>
             <span id="page-info" class="px-3 py-1"></span>
-            <button id="next-page" class="px-3 py-1 border rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">下一页</button>
-        </div>
-    </div>
-
-    <!-- 修改昵称模态框 -->
-    <div id="username-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
-        <div class="bg-white rounded-lg p-6 w-full max-w-sm">
-            <h3 class="text-lg font-semibold mb-4">修改昵称</h3>
-            <input type="text" id="new-username" class="w-full px-3 py-2 border border-gray-300 rounded-md mb-4" placeholder="新昵称">
-            <div class="flex justify-end gap-2">
-                <button id="cancel-username" class="px-4 py-2 border rounded-md hover:bg-gray-100">取消</button>
-                <button id="confirm-username" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90">确认</button>
-            </div>
+            <button id="next-page" class="px-3 py-1 border rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed">
+                下一页<i class="fa fa-chevron-right ml-1"></i>
+            </button>
         </div>
     </div>
 
     <script>
-        // 配置
         const DEFAULT_AVATAR = 'https://img.ixintu.com/download/jpg/20200901/3e9ce3813b7199ea9588eeb920f41208_512_512.jpg!bg';
-        const MAX_COMMENTS = 50; // 限制最大评论数量
-        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 限制文件大小为10MB
-        const MAX_IMAGE_SIZE = 200 * 1024; // 图片最大200KB
-        const IMAGE_QUALITY = 0.7; // 图片压缩质量
+        const MAX_COMMENTS = 100;
+        const MAX_FILE_SIZE = 10 * 1024 * 1024;
+        const MAX_IMAGE_SIZE = 200 * 1024;
+        const IMAGE_QUALITY = 0.7;
+        const PAGE_SIZE = 7;
+        const MAX_REPLIES_BEFORE_COLLAPSE = 5;
+        const ADMIN_PASSWORD = 'admin123';
         
-        // 用户数据初始化
-        function initUserData() {
-            let userData = JSON.parse(localStorage.getItem('userData') || '{}');
+        // 歌曲列表
+        const SONGS = [
+            { 
+                id: 501468000, 
+                name: "Sacred Play Secret Place", 
+                artist: "Matryoshka",
+                url: "https://music.163.com/song/media/outer/url?id=501468000.mp3",
+                lyricUrl: "https://api.allorigins.win/get?url=" + encodeURIComponent("https://music.163.com/api/song/lyric?id=501468000&lv=1&kv=1&tv=-1")
+            },
+            { 
+                id: 786262, 
+                name: "You", 
+                artist: "M.graveyard",
+                url: "https://music.163.com/song/media/outer/url?id=786262.mp3",
+                lyricUrl: "https://api.allorigins.win/get?url=" + encodeURIComponent("https://music.163.com/api/song/lyric?id=786262&lv=1&kv=1&tv=-1")
+            },
+            { 
+                id: 1996821601, 
+                name: "流星のパルス(流星的脉搏)", 
+                artist: "*Luna",
+                url: "https://music.163.com/song/media/outer/url?id=1996821601.mp3",
+                lyricUrl: "https://api.allorigins.win/get?url=" + encodeURIComponent("https://music.163.com/api/song/lyric?id=1996821601&lv=1&kv=1&tv=-1")
+            },
+            { 
+                id: 1996825230, 
+                name: "フロムトーキョー(From Tokyo)", 
+                artist: "夏代孝明",
+                url: "https://music.163.com/song/media/outer/url?id=1996825230.mp3",
+                lyricUrl: "https://api.allorigins.win/get?url=" + encodeURIComponent("https://music.163.com/api/song/lyric?id=1996825230&lv=1&kv=1&tv=-1")
+            },
+            { 
+                id: 427016439, 
+                name: "心加心", 
+                artist: "阿良良木健",
+                url: "https://music.163.com/song/media/outer/url?id=427016439.mp3",
+                lyricUrl: "https://api.allorigins.win/get?url=" + encodeURIComponent("https://music.163.com/api/song/lyric?id=427016439&lv=1&kv=1&tv=-1")
+            }
+        ];
+        
+        let currentSongIndex = 0;
+        let isPlaying = false;
+        let audio = new Audio();
+        let currentLyrics = [];
+        let currentPage = 1;
+        let sortBy = 'time';
+        let currentUser = null;
+        let isClockDigital = true; // 跟踪当前时钟样式，true为数字时钟，false为模拟时钟
+        let loginTimeout = null;
+        let isDragging = false; // 跟踪是否正在拖动进度条
+        let userIsScrolling = false; // 跟踪用户是否正在手动滚动歌词
+        let scrollTimeout = null; // 用于延迟恢复自动滚动
+
+        function initApp() {
+            simulateLoading();
+            initLocalStorage();
+            setupEventListeners();
+            startClock();
+            initAudioPlayer();
+            checkLoginStatus();
+        }
+
+        function initAudioPlayer() {
+            audio.addEventListener('timeupdate', updateProgress);
+            audio.addEventListener('ended', playNextSong);
+            audio.addEventListener('loadedmetadata', updateAudioDuration);
             
-            // 检查是否是新用户
-            if (!userData.username) {
-                const username = prompt('欢迎来到评论区，请设置您的昵称：');
-                if (username && username.trim()) {
-                    userData.username = username.trim();
-                } else {
-                    userData.username = '匿名用户' + Math.floor(Math.random() * 1000);
+            const progressContainer = document.getElementById('progress-container');
+            const progressHandle = document.getElementById('progress-handle');
+            
+            // 进度条点击事件
+            progressContainer.addEventListener('click', function(e) {
+                updateProgressFromMouseEvent(e);
+            });
+            
+            // 进度条拖动开始（鼠标按下）
+            progressHandle.addEventListener('mousedown', function(e) {
+                isDragging = true;
+                progressHandle.classList.add('scale-125');
+                document.body.style.cursor = 'grabbing';
+                e.preventDefault(); // 防止拖动时选中文本
+            });
+            
+            // 鼠标移动（拖动过程）
+            document.addEventListener('mousemove', function(e) {
+                if (isDragging) {
+                    updateProgressFromMouseEvent(e);
+                    e.preventDefault(); // 防止拖动时页面滚动
                 }
-                userData.avatar = DEFAULT_AVATAR;
-            }
+            });
             
-            // 初始化评论记录
-            if (!localStorage.getItem('commentHistory')) {
-                localStorage.setItem('commentHistory', JSON.stringify([]));
-            }
+            // 拖动结束（鼠标释放）
+            document.addEventListener('mouseup', function() {
+                if (isDragging) {
+                    isDragging = false;
+                    progressHandle.classList.remove('scale-125');
+                    document.body.style.cursor = '';
+                    
+                    // 设置音频位置
+                    const progress = parseFloat(document.getElementById('progress-bar').style.width);
+                    if (!isNaN(audio.duration)) {
+                        audio.currentTime = (progress / 100) * audio.duration;
+                    }
+                }
+            });
             
-            // 初始化评论存储
-            initCommentStorage();
+            // 歌词点击事件
+            document.getElementById('lyrics-scroll').addEventListener('click', function(e) {
+                const lyricLine = e.target.closest('.lyric-line');
+                if (lyricLine) {
+                    const index = Array.from(this.children).indexOf(lyricLine);
+                    if (index >= 0 && currentLyrics[index]) {
+                        // 用户点击歌词行时，跳转到对应时间点
+                        audio.currentTime = currentLyrics[index].time;
+                        updateProgress();
+                        // 暂时禁用用户滚动标记，让自动滚动生效
+                        userIsScrolling = false;
+                        if (scrollTimeout) clearTimeout(scrollTimeout);
+                    }
+                }
+            });
             
-            localStorage.setItem('userData', JSON.stringify(userData));
-            return userData;
+            // 歌词容器滚动事件 - 检测用户手动滚动
+            const lyricsContainer = document.getElementById('lyrics-container');
+            lyricsContainer.addEventListener('scroll', function() {
+                // 用户开始滚动时设置标记
+                userIsScrolling = true;
+                
+                // 清除之前的超时
+                if (scrollTimeout) clearTimeout(scrollTimeout);
+                
+                // 5秒后恢复自动滚动
+                scrollTimeout = setTimeout(() => {
+                    userIsScrolling = false;
+                }, 5000);
+            });
         }
         
-        // 初始化评论存储，确保不会超过限制
-        function initCommentStorage() {
-            if (!localStorage.getItem('comments')) {
-                localStorage.setItem('comments', JSON.stringify([]));
+        // 根据鼠标事件更新进度
+        function updateProgressFromMouseEvent(e) {
+            const progressContainer = document.getElementById('progress-container');
+            const rect = progressContainer.getBoundingClientRect();
+            
+            // 计算鼠标在进度条上的相对位置（0-100%）
+            let pos = (e.clientX - rect.left) / rect.width;
+            pos = Math.max(0, Math.min(1, pos)); // 限制在0-1之间
+            
+            // 更新进度条和手柄位置
+            const percentage = pos * 100;
+            document.getElementById('progress-bar').style.width = `${percentage}%`;
+            document.getElementById('progress-handle').style.left = `${percentage}%`;
+            
+            // 更新当前时间显示
+            if (!isNaN(audio.duration)) {
+                const currentTime = pos * audio.duration;
+                document.getElementById('current-time').textContent = formatTime(currentTime);
+            }
+        }
+
+        function updateAudioDuration() {
+            const totalTimeEl = document.getElementById('total-time');
+            totalTimeEl.textContent = formatTime(audio.duration);
+        }
+
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return "00:00";
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function updateProgress() {
+            // 如果正在拖动，不更新进度（避免与用户操作冲突）
+            if (isDragging) return;
+            
+            const progress = (audio.currentTime / audio.duration) * 100;
+            document.getElementById('progress-bar').style.width = `${progress}%`;
+            document.getElementById('progress-handle').style.left = `${progress}%`;
+            document.getElementById('current-time').textContent = formatTime(audio.currentTime);
+            updateLyrics();
+        }
+
+        function updateLyrics() {
+            if (currentLyrics.length === 0) return;
+            
+            // 如果用户正在手动滚动歌词，则不自动定位
+            if (userIsScrolling) return;
+            
+            const currentTime = audio.currentTime;
+            const lyricsScroll = document.getElementById('lyrics-scroll');
+            const lyricsContainer = document.getElementById('lyrics-container');
+            let activeIndex = -1;
+            
+            for (let i = 0; i < currentLyrics.length; i++) {
+                if (currentLyrics[i].time <= currentTime) {
+                    activeIndex = i;
+                } else {
+                    break;
+                }
+            }
+            
+            if (activeIndex !== -1) {
+                // 更新活跃歌词样式
+                document.querySelectorAll('.lyric-line').forEach((line, index) => {
+                    line.classList.toggle('active', index === activeIndex);
+                });
+                
+                // 计算需要滚动的位置，使当前歌词居中
+                const activeLine = lyricsScroll.children[activeIndex];
+                if (activeLine) {
+                    const containerHeight = lyricsContainer.clientHeight;
+                    const lineTop = activeLine.offsetTop;
+                    const lineHeight = activeLine.offsetHeight;
+                    
+                    // 计算滚动位置，使当前歌词居中
+                    const scrollPosition = lineTop - (containerHeight / 2) + (lineHeight / 2);
+                    
+                    // 平滑滚动到目标位置
+                    lyricsContainer.scrollTo({
+                        top: scrollPosition,
+                        behavior: 'smooth'
+                    });
+                }
+            }
+        }
+
+        // 解析带翻译的歌词
+        function parseLyricsWithTranslation(lrcContent, translationContent) {
+            const lyrics = [];
+            const translationMap = {};
+            const timeRegex = /\[(\d{2}):(\d{2}\.\d{2,3})\]/;
+            
+            // 先解析翻译内容
+            if (translationContent) {
+                const transLines = translationContent.split('\n');
+                transLines.forEach(line => {
+                    const match = line.match(timeRegex);
+                    if (match) {
+                        const minutes = parseInt(match[1]);
+                        const seconds = parseFloat(match[2]);
+                        const time = minutes * 60 + seconds;
+                        const text = line.replace(timeRegex, '').trim();
+                        translationMap[time.toFixed(2)] = text;
+                    }
+                });
+            }
+            
+            // 解析主歌词并匹配翻译
+            const lrcLines = lrcContent.split('\n');
+            lrcLines.forEach(line => {
+                const match = line.match(timeRegex);
+                if (match) {
+                    const minutes = parseInt(match[1]);
+                    const seconds = parseFloat(match[2]);
+                    const time = minutes * 60 + seconds;
+                    const text = line.replace(timeRegex, '').trim();
+                    
+                    if (text) {
+                        // 查找对应的翻译
+                        const translation = translationMap[time.toFixed(2)] || '';
+                        lyrics.push({ 
+                            time, 
+                            text,
+                            translation 
+                        });
+                    }
+                }
+            });
+            
+            return lyrics.sort((a, b) => a.time - b.time);
+        }
+
+        // 加载带翻译的歌词
+        async function loadLyrics(lyricUrl) {
+            try {
+                const response = await fetch(lyricUrl);
+                if (!response.ok) throw new Error('无法获取歌词');
+                
+                const data = await response.json();
+                const lyricsContainer = document.getElementById('lyrics-scroll');
+                
+                lyricsContainer.innerHTML = '';
+                currentLyrics = [];
+                
+                // 解析代理返回的内容
+                const content = JSON.parse(data.contents);
+                
+                // 获取主歌词和翻译歌词
+                const lrcContent = content.lrc?.lyric || '';
+                const translationContent = content.tlyric?.lyric || '';
+                
+                if (lrcContent) {
+                    // 解析带翻译的歌词
+                    currentLyrics = parseLyricsWithTranslation(lrcContent, translationContent);
+                    
+                    currentLyrics.forEach(lyric => {
+                        const div = document.createElement('div');
+                        div.className = 'lyric-line';
+                        
+                        // 主歌词
+                        const mainText = document.createElement('div');
+                        mainText.className = 'lyric-main';
+                        mainText.textContent = lyric.text;
+                        div.appendChild(mainText);
+                        
+                        // 翻译（如果有的话）
+                        if (lyric.translation) {
+                            const transText = document.createElement('div');
+                            transText.className = 'lyric-translation';
+                            transText.textContent = lyric.translation;
+                            div.appendChild(transText);
+                        }
+                        
+                        lyricsContainer.appendChild(div);
+                    });
+                } else {
+                    const div = document.createElement('div');
+                    div.className = 'lyric-line';
+                    div.innerHTML = '<div class="lyric-main">暂无歌词</div>';
+                    lyricsContainer.appendChild(div);
+                }
+            } catch (error) {
+                console.error('加载歌词失败:', error);
+                const lyricsContainer = document.getElementById('lyrics-scroll');
+                lyricsContainer.innerHTML = '<div class="lyric-line"><div class="lyric-main">无法加载歌词</div></div>';
+            }
+        }
+
+        function loadCurrentSong() {
+            const song = SONGS[currentSongIndex];
+            document.getElementById('song-title').textContent = song.name;
+            document.getElementById('song-artist').textContent = song.artist;
+            document.getElementById('current-song').textContent = song.name;
+            audio.src = song.url;
+            loadLyrics(song.lyricUrl);
+        }
+
+        function togglePlayPause() {
+            if (isPlaying) {
+                audio.pause();
+                document.getElementById('play-pause').innerHTML = '<i class="fa fa-play"></i>';
+            } else {
+                if (audio.src === '') {
+                    loadCurrentSong();
+                }
+                audio.play();
+                document.getElementById('play-pause').innerHTML = '<i class="fa fa-pause"></i>';
+            }
+            isPlaying = !isPlaying;
+        }
+
+        function playPrevSong() {
+            currentSongIndex = (currentSongIndex - 1 + SONGS.length) % SONGS.length;
+            loadCurrentSong();
+            if (!isPlaying) {
+                togglePlayPause();
+            } else {
+                audio.play();
+            }
+        }
+
+        function playNextSong() {
+            currentSongIndex = (currentSongIndex + 1) % SONGS.length;
+            loadCurrentSong();
+            if (!isPlaying) {
+                togglePlayPause();
+            } else {
+                audio.play();
+            }
+        }
+
+        function initLocalStorage() {
+            // 检查并初始化localStorage项，确保它们是有效的JSON
+            try {
+                if (!localStorage.getItem('users')) localStorage.setItem('users', JSON.stringify({}));
+                else JSON.parse(localStorage.getItem('users')); // 验证格式
+                
+                if (!localStorage.getItem('comments')) localStorage.setItem('comments', JSON.stringify([]));
+                else JSON.parse(localStorage.getItem('comments')); // 验证格式
+                
+                if (!localStorage.getItem('reports')) localStorage.setItem('reports', JSON.stringify([]));
+                else JSON.parse(localStorage.getItem('reports')); // 验证格式
+                
+                if (!localStorage.getItem('announcement')) localStorage.setItem('announcement', '');
+                
+                if (!localStorage.getItem('bannedUsers')) localStorage.setItem('bannedUsers', JSON.stringify([]));
+                else JSON.parse(localStorage.getItem('bannedUsers')); // 验证格式
+                
+                // 检查currentUser是否存在且格式正确
+                const currentUser = localStorage.getItem('currentUser');
+                if (currentUser) {
+                    JSON.parse(currentUser); // 验证格式
+                }
+            } catch (error) {
+                console.error('localStorage数据格式错误，已重置:', error);
+                // 重置损坏的localStorage项
+                if (error.message.includes('users')) localStorage.setItem('users', JSON.stringify({}));
+                if (error.message.includes('comments')) localStorage.setItem('comments', JSON.stringify([]));
+                if (error.message.includes('reports')) localStorage.setItem('reports', JSON.stringify([]));
+                if (error.message.includes('bannedUsers')) localStorage.setItem('bannedUsers', JSON.stringify([]));
+                if (error.message.includes('currentUser')) localStorage.removeItem('currentUser');
+            }
+        }
+
+        function setupEventListeners() {
+            // 音乐控制按钮
+            document.getElementById('play-pause').addEventListener('click', togglePlayPause);
+            document.getElementById('prev-song').addEventListener('click', playPrevSong);
+            document.getElementById('next-song').addEventListener('click', playNextSong);
+            
+            // 登录相关
+            document.getElementById('submit-login').addEventListener('click', handleLogin);
+            document.getElementById('admin-login-link').addEventListener('click', showAdminLogin);
+            document.getElementById('back-to-user-login').addEventListener('click', showUserLogin);
+            document.getElementById('submit-admin-login').addEventListener('click', handleAdminLogin);
+            document.getElementById('user-logout').addEventListener('click', handleLogout);
+            document.getElementById('admin-logout').addEventListener('click', handleAdminLogout);
+            document.getElementById('change-username').addEventListener('click', showUsernameModal);
+            document.getElementById('confirm-username').addEventListener('click', confirmUsername);
+            
+            // 评论相关
+            document.getElementById('submit-comment').addEventListener('click', submitComment);
+            document.getElementById('sort-time').addEventListener('click', () => sortComments('time'));
+            document.getElementById('sort-likes').addEventListener('click', () => sortComments('likes'));
+            document.getElementById('prev-page').addEventListener('click', () => changePage(-1));
+            document.getElementById('next-page').addEventListener('click', () => changePage(1));
+            
+            // 管理员面板
+            document.getElementById('open-admin-panel').addEventListener('click', openAdminPanel);
+            document.getElementById('close-admin-panel').addEventListener('click', closeAdminPanel);
+            document.getElementById('overlay').addEventListener('click', closeAdminPanel);
+            document.getElementById('save-announcement').addEventListener('click', saveAnnouncement);
+            document.getElementById('delete-announcement').addEventListener('click', deleteAnnouncement);
+            
+            // 举报相关
+            document.getElementById('cancel-report').addEventListener('click', closeReportModal);
+            document.getElementById('submit-report').addEventListener('click', submitReport);
+            document.getElementById('review-no-issue').addEventListener('click', () => handleReportReview('no-issue'));
+            document.getElementById('review-keep').addEventListener('click', () => handleReportReview('keep'));
+            document.getElementById('review-delete').addEventListener('click', () => handleReportReview('delete'));
+            
+            // 头像上传
+            document.getElementById('avatar-upload').addEventListener('change', handleAvatarUpload);
+            document.getElementById('avatar-upload-modal').addEventListener('change', handleAvatarUploadModal);
+            
+            // 图片查看器
+            document.getElementById('close-image-viewer').addEventListener('click', closeImageViewer);
+            document.getElementById('image-viewer').addEventListener('click', (e) => {
+                if (e.target === document.getElementById('image-viewer')) {
+                    closeImageViewer();
+                }
+            });
+            
+            // 文件上传预览
+            document.getElementById('file-upload').addEventListener('change', handleFileUpload);
+            
+            // 时钟样式切换
+            document.getElementById('toggle-clock').addEventListener('click', toggleClockStyle);
+        }
+
+        // 切换时钟样式
+        function toggleClockStyle() {
+            isClockDigital = !isClockDigital;
+            const digitalClock = document.getElementById('digital-clock');
+            const analogClock = document.getElementById('analog-clock');
+            
+            if (isClockDigital) {
+                // 显示数字时钟，隐藏模拟时钟
+                digitalClock.classList.remove('hidden');
+                analogClock.classList.add('hidden');
+            } else {
+                // 显示模拟时钟，隐藏数字时钟
+                digitalClock.classList.add('hidden');
+                analogClock.classList.remove('hidden');
+                // 更新模拟时钟指针位置
+                updateAnalogClock();
+            }
+        }
+
+        function startClock() {
+            updateClock();
+            setInterval(updateClock, 1000);
+        }
+
+        function updateClock() {
+            const now = new Date();
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            const seconds = now.getSeconds().toString().padStart(2, '0');
+            
+            // 更新数字时钟
+            document.getElementById('digital-clock').textContent = `${hours}:${minutes}:${seconds}`;
+            
+            // 如果当前显示的是模拟时钟，更新指针位置
+            if (!isClockDigital) {
+                updateAnalogClock();
+            }
+        }
+
+        // 更新模拟时钟指针位置
+        function updateAnalogClock() {
+            const now = new Date();
+            const hours = now.getHours() % 12; // 转为12小时制
+            const minutes = now.getMinutes();
+            const seconds = now.getSeconds();
+            
+            // 计算各指针的角度（秒针6度/秒，分针6度/分，时针30度/小时+0.5度/分）
+            const secondDeg = seconds * 6;
+            const minuteDeg = minutes * 6 + seconds * 0.1;
+            const hourDeg = hours * 30 + minutes * 0.5;
+            
+            // 应用旋转
+            document.getElementById('second-hand').style.transform = `rotate(${secondDeg}deg)`;
+            document.getElementById('minute-hand').style.transform = `rotate(${minuteDeg}deg)`;
+            document.getElementById('hour-hand').style.transform = `rotate(${hourDeg}deg)`;
+        }
+
+        function simulateLoading() {
+            const loadingScreen = document.getElementById('loading-screen');
+            const estimatedTimeEl = document.getElementById('estimated-time');
+            let seconds = 0;
+            
+            const interval = setInterval(() => {
+                seconds++;
+                estimatedTimeEl.textContent = (seconds / 60).toFixed(1);
+                
+                // 模拟2-4秒后加载完成
+                if (seconds > 2 + Math.random() * 2) {
+                    clearInterval(interval);
+                    loadingScreen.style.opacity = '0';
+                    setTimeout(() => {
+                        loadingScreen.style.display = 'none';
+                    }, 500);
+                }
+            }, 1000);
+        }
+
+        function checkLoginStatus() {
+            try {
+                const savedUser = localStorage.getItem('currentUser');
+                if (savedUser) {
+                    // 尝试解析用户数据，如果失败则清除
+                    currentUser = JSON.parse(savedUser);
+                    updateUserInterface();
+                    loadComments();
+                    loadAnnouncement();
+                    loadBannedUsers();
+                } else {
+                    showLoginModal();
+                }
+            } catch (error) {
+                console.error('解析用户数据失败，已清除无效数据:', error);
+                localStorage.removeItem('currentUser');
+                currentUser = null;
+                showLoginModal();
+            }
+        }
+
+        function showLoginModal() {
+            document.getElementById('login-modal').classList.add('show');
+            document.getElementById('overlay').classList.add('show');
+        }
+
+        function hideLoginModal() {
+            document.getElementById('login-modal').classList.remove('show');
+            document.getElementById('admin-login-modal').classList.remove('show');
+            document.getElementById('overlay').classList.remove('show');
+        }
+
+        function showAdminLogin() {
+            document.getElementById('login-modal').classList.remove('show');
+            document.getElementById('admin-login-modal').classList.add('show');
+        }
+
+        function showUserLogin() {
+            document.getElementById('admin-login-modal').classList.remove('show');
+            document.getElementById('login-modal').classList.add('show');
+        }
+
+        function handleLogin() {
+            const studentId = document.getElementById('student-id').value.trim();
+            const realName = document.getElementById('real-name').value.trim();
+            
+            if (!studentId || !realName) {
+                alert('请输入学号和姓名');
                 return;
             }
             
-            // 检查并清理旧评论
-            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
-            if (comments.length > MAX_COMMENTS) {
-                // 只保留最新的MAX_COMMENTS条评论
-                const trimmedComments = comments.slice(0, MAX_COMMENTS);
-                try {
-                    localStorage.setItem('comments', JSON.stringify(trimmedComments));
-                } catch (e) {
-                    console.warn('清理评论时发生错误，将尝试进一步减少存储:', e);
-                    // 进一步减少评论数量
-                    localStorage.setItem('comments', JSON.stringify(trimmedComments.slice(0, MAX_COMMENTS / 2)));
-                }
+            const users = JSON.parse(localStorage.getItem('users'));
+            let user = users[studentId];
+            
+            if (!user) {
+                user = {
+                    id: studentId,
+                    name: realName,
+                    username: `${studentId}-${realName}`,
+                    avatar: DEFAULT_AVATAR,
+                    isAdmin: false,
+                    joinDate: new Date().toISOString()
+                };
+                users[studentId] = user;
+                localStorage.setItem('users', JSON.stringify(users));
+            }
+            
+            currentUser = user;
+            localStorage.setItem('currentUser', JSON.stringify(user));
+            
+            if (!user.username || user.username === `${studentId}-${realName}`) {
+                document.getElementById('new-username').value = '';
+                document.getElementById('avatar-preview').src = user.avatar || DEFAULT_AVATAR;
+                document.getElementById('username-modal').classList.add('show');
+                document.getElementById('overlay').classList.add('show');
+            } else {
+                hideLoginModal();
+                updateUserInterface();
+                loadComments();
+                loadAnnouncement();
+                loadBannedUsers();
             }
         }
-        
-        // 安全地保存数据到localStorage
-        function safeSetItem(key, value) {
-            try {
-                localStorage.setItem(key, value);
-                return true;
-            } catch (e) {
-                if (e.name === 'QuotaExceededError') {
-                    console.error('存储配额不足，尝试清理旧数据:', e);
-                    
-                    // 尝试清理最旧的评论
-                    if (key === 'comments') {
-                        const comments = JSON.parse(value || '[]');
-                        // 如果还有评论可以清理
-                        if (comments.length > 1) {
-                            // 移除最旧的一条评论
-                            const newComments = comments.slice(0, comments.length - 1);
-                            return safeSetItem(key, JSON.stringify(newComments));
-                        }
-                    }
-                    
-                    // 尝试清理评论历史
-                    if (key !== 'commentHistory') {
-                        localStorage.setItem('commentHistory', JSON.stringify([]));
-                        return safeSetItem(key, value);
-                    }
-                }
-                return false;
-            }
-        }
-        
-        // 获取当前用户数据
-        function getUserData() {
-            return JSON.parse(localStorage.getItem('userData') || '{}');
-        }
-        
-        // 保存用户数据
-        function saveUserData(data) {
-            safeSetItem('userData', JSON.stringify(data));
-        }
-        
-        // 分页配置
-        const PAGE_SIZE = 10;
-        let currentPage = 1;
-        let currentUser = initUserData();
 
-        // 更新用户信息显示
-        function updateUserDisplay() {
+        function handleAdminLogin() {
+            const password = document.getElementById('admin-password').value;
+            
+            if (password === ADMIN_PASSWORD) {
+                const adminId = 'admin';
+                const users = JSON.parse(localStorage.getItem('users'));
+                let admin = users[adminId];
+                
+                if (!admin) {
+                    admin = {
+                        id: adminId,
+                        name: '管理员',
+                        username: '管理员',
+                        avatar: DEFAULT_AVATAR,
+                        isAdmin: true,
+                        joinDate: new Date().toISOString()
+                    };
+                    users[adminId] = admin;
+                    localStorage.setItem('users', JSON.stringify(users));
+                }
+                
+                currentUser = admin;
+                localStorage.setItem('currentUser', JSON.stringify(admin));
+                
+                hideLoginModal();
+                updateUserInterface();
+                loadComments();
+                loadAnnouncement();
+                loadBannedUsers();
+                loadAdminPanelData();
+            } else {
+                alert('密码错误');
+            }
+        }
+
+        function handleLogout() {
+            if (confirm('确定要退出登录吗？')) {
+                localStorage.removeItem('currentUser');
+                currentUser = null;
+                showLoginModal();
+            }
+        }
+
+        function handleAdminLogout() {
+            if (confirm('确定要退出管理员登录吗？')) {
+                localStorage.removeItem('currentUser');
+                currentUser = null;
+                closeAdminPanel();
+                showLoginModal();
+            }
+        }
+
+        function showUsernameModal() {
+            const user = currentUser;
+            document.getElementById('new-username').value = user.username || '';
+            document.getElementById('avatar-preview').src = user.avatar || DEFAULT_AVATAR;
+            document.getElementById('username-modal').classList.add('show');
+            document.getElementById('overlay').classList.add('show');
+        }
+
+        function confirmUsername() {
+            const newUsername = document.getElementById('new-username').value.trim();
+            const user = currentUser;
+            
+            if (newUsername) {
+                user.username = newUsername;
+            }
+            
+            const users = JSON.parse(localStorage.getItem('users'));
+            users[user.id] = user;
+            localStorage.setItem('users', JSON.stringify(users));
+            localStorage.setItem('currentUser', JSON.stringify(user));
+            
+            document.getElementById('username-modal').classList.remove('show');
+            document.getElementById('overlay').classList.remove('show');
+            
+            updateUserInterface();
+            loadComments();
+        }
+
+        function updateUserInterface() {
+            if (!currentUser) return;
+            
             document.getElementById('current-username').textContent = currentUser.username;
             document.getElementById('user-avatar').src = currentUser.avatar || DEFAULT_AVATAR;
-        }
-
-        // 获取当前时间
-        function getCurrentTime() {
-            const now = new Date();
-            return now.toISOString().slice(0, 19).replace('T', ' ');
-        }
-
-        // 生成唯一ID
-        function generateId() {
-            return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-        }
-
-        // 检查是否可以发布评论（防刷屏）
-        function canPostComment() {
-            const history = JSON.parse(localStorage.getItem('commentHistory') || '[]');
-            const now = new Date().getTime();
-            const twoMinutes = 2 * 60 * 1000; // 2分钟的毫秒数
             
-            // 过滤掉2分钟前的记录
-            const recentHistory = history.filter(timestamp => now - timestamp < twoMinutes);
-            
-            // 如果最近2分钟内发布超过7条，返回剩余等待时间
-            if (recentHistory.length >= 7) {
-                const oldestInWindow = Math.min(...recentHistory);
-                const waitTime = twoMinutes - (now - oldestInWindow);
-                return { canPost: false, waitTime: Math.ceil(waitTime / 1000) };
+            if (currentUser.isAdmin) {
+                document.getElementById('admin-badge').classList.remove('hidden');
+                document.getElementById('admin-button').classList.remove('hidden');
+            } else {
+                document.getElementById('admin-badge').classList.add('hidden');
+                document.getElementById('admin-button').classList.add('hidden');
             }
             
-            return { canPost: true };
-        }
-
-        // 记录评论发布时间
-        function recordCommentTime() {
-            const history = JSON.parse(localStorage.getItem('commentHistory') || '[]');
-            // 只保留最近100条记录
-            if (history.length > 100) {
-                history.splice(0, history.length - 100);
-            }
-            history.push(new Date().getTime());
-            safeSetItem('commentHistory', JSON.stringify(history));
-        }
-
-        // 检查是否是评论作者
-        function isCommentAuthor(commentAuthor) {
-            return commentAuthor === currentUser.username;
-        }
-
-        // 检查评论是否可以撤回（只有作者可以撤回）
-        function canWithdraw(comment) {
-            return isCommentAuthor(comment.author);
-        }
-
-        // 获取当前页的评论
-        function getCurrentPageComments() {
-            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
-            const startIndex = (currentPage - 1) * PAGE_SIZE;
-            const endIndex = startIndex + PAGE_SIZE;
-            return comments.slice(startIndex, endIndex);
-        }
-
-        // 获取总页数
-        function getTotalPages() {
-            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
-            return Math.ceil(comments.length / PAGE_SIZE);
-        }
-
-        // 更新分页控件状态
-        function updatePagination() {
-            const totalPages = getTotalPages();
-            const paginationEl = document.getElementById('pagination');
-            const prevBtn = document.getElementById('prev-page');
-            const nextBtn = document.getElementById('next-page');
-            const pageInfo = document.getElementById('page-info');
-
-            paginationEl.classList.toggle('hidden', totalPages <= 1);
+            // 检查用户是否被禁言
+            const bannedUsers = JSON.parse(localStorage.getItem('bannedUsers'));
+            const isBanned = bannedUsers.some(u => u.id === currentUser.id);
             
-            if (totalPages <= 1) return;
-
-            pageInfo.textContent = `第 ${currentPage} / ${totalPages} 页`;
-            prevBtn.disabled = currentPage === 1;
-            nextBtn.disabled = currentPage === totalPages;
+            if (isBanned) {
+                document.getElementById('posting-restriction').textContent = '您已被禁言，无法发布评论';
+                document.getElementById('posting-restriction').classList.remove('hidden');
+                document.getElementById('submit-comment').disabled = true;
+                document.getElementById('submit-comment').classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                document.getElementById('posting-restriction').classList.add('hidden');
+                document.getElementById('submit-comment').disabled = false;
+                document.getElementById('submit-comment').classList.remove('opacity-50', 'cursor-not-allowed');
+            }
         }
 
-        // 检查评论是否需要折叠
-        function needsCollapsing(content) {
-            // 简单判断：超过4行或特定字符数
-            const lineCount = (content.match(/\n/g) || []).length + 1;
-            return lineCount > 4 || content.length > 200;
+        function submitComment() {
+            const content = document.getElementById('comment-content').value.trim();
+            const link = document.getElementById('link-upload').value.trim();
+            
+            if (!content) {
+                document.getElementById('content-error').classList.remove('hidden');
+                return;
+            }
+            
+            document.getElementById('content-error').classList.add('hidden');
+            
+            const comments = JSON.parse(localStorage.getItem('comments'));
+            const newComment = {
+                id: Date.now().toString(),
+                userId: currentUser.id,
+                username: currentUser.username,
+                avatar: currentUser.avatar || DEFAULT_AVATAR,
+                content: content,
+                link: link,
+                timestamp: new Date().toISOString(),
+                likes: 0,
+                likedBy: [],
+                replies: []
+            };
+            
+            // 添加文件信息（如果有）
+            const filePreview = document.getElementById('file-preview');
+            if (filePreview.classList.contains('show')) {
+                newComment.file = {
+                    name: filePreview.dataset.filename,
+                    url: filePreview.dataset.fileurl,
+                    type: filePreview.dataset.filetype
+                };
+            }
+            
+            comments.unshift(newComment);
+            if (comments.length > MAX_COMMENTS) {
+                comments.pop();
+            }
+            
+            localStorage.setItem('comments', JSON.stringify(comments));
+            document.getElementById('comment-content').value = '';
+            document.getElementById('link-upload').value = '';
+            document.getElementById('file-upload').value = '';
+            filePreview.classList.add('hidden');
+            
+            loadComments();
         }
 
-        // 渲染评论列表
-        function renderComments() {
-            const commentsContainer = document.getElementById('comments-container');
-            const allComments = JSON.parse(localStorage.getItem('comments') || '[]');
-            const currentComments = getCurrentPageComments();
+        function loadComments() {
+            const comments = JSON.parse(localStorage.getItem('comments'));
+            const container = document.getElementById('comments-container');
             const emptyState = document.getElementById('empty-state');
-
-            // 清空容器（保留empty-state）
-            Array.from(commentsContainer.children).forEach(child => {
-                if (child.id !== 'empty-state') child.remove();
-            });
-
-            // 显示/隐藏空状态
-            emptyState.style.display = allComments.length === 0 ? 'block' : 'none';
-
-            // 渲染当前页的每条评论
-            currentComments.forEach(comment => {
-                const commentEl = createCommentElement(comment);
-                commentsContainer.appendChild(commentEl);
-            });
-
-            updatePagination();
-        }
-
-        // 创建附件显示元素
-        function createAttachmentsElement(attachments) {
-            if (!attachments || attachments.length === 0) return '';
+            const pagination = document.getElementById('pagination');
+            const pageInfo = document.getElementById('page-info');
             
-            let html = '<div class="mt-2 space-y-1">';
-            attachments.forEach(attach => {
-                if (attach.type === 'file') {
-                    const isImage = attach.mimeType.startsWith('image/');
-                    // 为图片添加加载状态和错误处理
-                    const imageAttrs = isImage ? `
-                        class="w-16 h-16 object-cover rounded image-loading"
-                        onload="this.classList.remove('image-loading')"
-                        onerror="this.src='${DEFAULT_AVATAR}'; this.classList.remove('image-loading')"
-                    ` : '';
-                    
-                    html += `
-                        <div class="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                            ${isImage ? 
-                                `<img src="${attach.url}" alt="附件图片" ${imageAttrs}>` : 
-                                `<span class="text-gray-500">📄</span>`
-                            }
-                            <div>
-                                <div class="text-sm">${attach.name}</div>
-                                <a href="${attach.url}" target="_blank" class="text-xs text-primary hover:underline">查看</a>
-                            </div>
-                        </div>
-                    `;
-                } else if (attach.type === 'link') {
-                    // 检查是否是图片链接
-                    const isImageLink = attach.url.match(/\.(jpeg|jpg|gif|png|webp)$/i);
-                    html += `
-                        <div class="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                            ${isImageLink ? 
-                                `<img src="${attach.url}" alt="链接图片" class="w-16 h-16 object-cover rounded image-loading"
-                                    onload="this.classList.remove('image-loading')"
-                                    onerror="this.src='${DEFAULT_AVATAR}'; this.classList.remove('image-loading')">` : 
-                                `<span class="text-gray-500">🔗</span>`
-                            }
-                            <a href="${attach.url}" target="_blank" class="text-sm text-primary hover:underline break-all">${attach.url}</a>
-                        </div>
-                    `;
-                }
+            if (comments.length === 0) {
+                emptyState.classList.remove('hidden');
+                pagination.classList.add('hidden');
+                container.innerHTML = '';
+                return;
+            }
+            
+            emptyState.classList.add('hidden');
+            
+            // 排序评论
+            let sortedComments = [...comments];
+            if (sortBy === 'time') {
+                sortedComments.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            } else if (sortBy === 'likes') {
+                sortedComments.sort((a, b) => b.likes - a.likes);
+            }
+            
+            // 分页
+            const totalPages = Math.ceil(sortedComments.length / PAGE_SIZE);
+            currentPage = Math.max(1, Math.min(currentPage, totalPages));
+            const startIndex = (currentPage - 1) * PAGE_SIZE;
+            const paginatedComments = sortedComments.slice(startIndex, startIndex + PAGE_SIZE);
+            
+            // 更新分页信息
+            pageInfo.textContent = `第 ${currentPage} 页 / 共 ${totalPages} 页`;
+            document.getElementById('prev-page').disabled = currentPage === 1;
+            document.getElementById('next-page').disabled = currentPage === totalPages;
+            pagination.classList.remove('hidden');
+            
+            // 渲染评论
+            container.innerHTML = '';
+            paginatedComments.forEach(comment => {
+                container.appendChild(createCommentElement(comment));
             });
-            html += '</div>';
-            return html;
         }
 
-        // 创建单条评论元素
-        function createCommentElement(comment, isReply = false) {
+        function createCommentElement(comment) {
             const div = document.createElement('div');
-            div.className = `comment-shadow rounded-lg p-4 bg-white/90 ${isReply ? 'reply-indent mt-3' : ''}`;
+            div.className = 'comment-shadow bg-white rounded-lg p-4';
             div.dataset.id = comment.id;
-
-            // 确保必要属性存在
-            comment.replies = comment.replies || [];
-            comment.showAllReplies = comment.showAllReplies || false;
-            comment.attachments = comment.attachments || [];
-            comment.showFullContent = comment.showFullContent || false;
             
-            // 检查是否可以撤回
-            const withdrawable = canWithdraw(comment);
+            // 检查用户是否被禁言
+            const bannedUsers = JSON.parse(localStorage.getItem('bannedUsers'));
+            const isBanned = bannedUsers.some(u => u.id === comment.userId);
             
-            // 处理回复折叠逻辑
-            const replies = comment.replies;
-            const showAllReplies = comment.showAllReplies;
-            const visibleReplies = showAllReplies ? replies : replies.slice(0, 3);
-            const hasMoreReplies = replies.length > 3;
+            let fileHtml = '';
+            if (comment.file) {
+                if (comment.file.type.startsWith('image/')) {
+                    fileHtml = `<div class="mt-2">
+                        <img src="${comment.file.url}" alt="${comment.file.name}" class="max-w-full max-h-60 rounded cursor-pointer comment-image">
+                        <p class="text-xs text-gray-500 mt-1">${comment.file.name}</p>
+                    </div>`;
+                } else {
+                    fileHtml = `<div class="mt-2 flex items-center text-sm text-primary">
+                        <i class="fa fa-file-o mr-1"></i>
+                        <a href="${comment.file.url}" target="_blank">${comment.file.name}</a>
+                    </div>`;
+                }
+            }
             
-            // 处理长评论折叠
-            const contentNeedsCollapsing = needsCollapsing(comment.content);
-            const showFullContent = comment.showFullContent;
+            let linkHtml = '';
+            if (comment.link) {
+                const linkText = comment.link.length > 30 ? comment.link.substring(0, 30) + '...' : comment.link;
+                linkHtml = `<div class="mt-2 flex items-center text-sm text-primary">
+                    <i class="fa fa-link mr-1"></i>
+                    <a href="${comment.link}" target="_blank">${linkText}</a>
+                </div>`;
+            }
             
-            // 头像加载处理
-            const avatarSrc = comment.avatar || DEFAULT_AVATAR;
+            const isLiked = comment.likedBy.includes(currentUser.id);
+            const likeIcon = isLiked ? 'fa-thumbs-up' : 'fa-thumbs-o-up';
+            const likeClass = isLiked ? 'text-primary' : 'text-gray-500';
+            
+            const date = new Date(comment.timestamp);
+            const formattedDate = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
             
             div.innerHTML = `
-                <div class="flex gap-3 mb-2">
-                    <img src="${avatarSrc}" 
-                         alt="${comment.author}的头像" 
-                         class="w-8 h-8 rounded-full object-cover image-loading"
-                         onload="this.classList.remove('image-loading')"
-                         onerror="this.src='${DEFAULT_AVATAR}'; this.classList.remove('image-loading')">
+                <div class="flex items-start gap-3">
+                    <img src="${comment.avatar}" alt="${comment.username}" class="w-10 h-10 rounded-full object-cover">
                     <div class="flex-1">
-                        <div class="flex justify-between items-start">
-                            <h3 class="font-semibold text-gray-800">${comment.author}</h3>
-                            <span class="text-xs text-gray-500">${comment.time}</span>
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span class="font-medium ${isBanned ? 'banned-user' : ''}">${comment.username}</span>
+                                ${isBanned ? '<span class="ml-2 text-xs bg-danger/10 text-danger px-1.5 py-0.5 rounded">已禁言</span>' : ''}
+                            </div>
+                            <span class="text-xs text-gray-500">${formattedDate}</span>
                         </div>
-                        <div class="text-gray-700 mb-2 ${contentNeedsCollapsing && !showFullContent ? 'collapsed-content' : ''}">
-                            ${comment.content}
+                        <p class="mt-1 text-gray-700">${comment.content}</p>
+                        ${fileHtml}
+                        ${linkHtml}
+                        <div class="mt-2 flex items-center gap-4">
+                            <button class="like-button flex items-center text-sm ${likeClass}" data-id="${comment.id}">
+                                <i class="fa ${likeIcon} mr-1"></i>
+                                <span>${comment.likes}</span>
+                            </button>
+                            <button class="reply-button flex items-center text-sm text-gray-500" data-id="${comment.id}">
+                                <i class="fa fa-reply mr-1"></i>
+                                <span>回复</span>
+                            </button>
+                            ${currentUser.isAdmin || currentUser.id !== comment.userId ? `
+                                <button class="report-button flex items-center text-sm text-gray-500" data-id="${comment.id}">
+                                    <i class="fa fa-flag mr-1"></i>
+                                    <span>举报</span>
+                                </button>
+                            ` : ''}
+                            ${currentUser.isAdmin ? `
+                                <button class="delete-comment-button flex items-center text-sm text-gray-500" data-id="${comment.id}">
+                                    <i class="fa fa-trash mr-1"></i>
+                                    <span>删除</span>
+                                </button>
+                            ` : ''}
                         </div>
-                        ${contentNeedsCollapsing ? `
-                            <button class="toggle-content text-sm text-primary mb-2" data-id="${comment.id}">
-                                ${showFullContent ? '收起' : '展开全部'}
+                        <div class="reply-form mt-3 hidden" data-id="${comment.id}">
+                            <textarea rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="回复..."></textarea>
+                            <div class="mt-1 flex justify-end gap-2">
+                                <button class="cancel-reply px-2 py-1 border rounded text-xs">取消</button>
+                                <button class="submit-reply px-2 py-1 bg-primary text-white rounded text-xs">回复</button>
+                            </div>
+                        </div>
+                        <div class="replies mt-3 space-y-3" data-id="${comment.id}">
+                            ${comment.replies.map(reply => createReplyHtml(reply)).join('')}
+                        </div>
+                        ${comment.replies.length > MAX_REPLIES_BEFORE_COLLAPSE ? `
+                            <button class="show-more-replies text-xs text-primary mt-1" data-id="${comment.id}">
+                                显示全部 ${comment.replies.length} 条回复
                             </button>
                         ` : ''}
-                        ${createAttachmentsElement(comment.attachments)}
                     </div>
-                </div>
-                <div class="flex items-center gap-4 text-sm">
-                    <button class="like-btn flex items-center gap-1 text-gray-600 hover:text-red-500 transition-colors" 
-                            data-id="${comment.id}">
-                        <span>${comment.isLiked ? '❤️' : '🤍'}</span>
-                        <span>${comment.likes}</span>
-                    </button>
-                    <button class="reply-btn flex items-center gap-1 text-gray-600 hover:text-primary transition-colors">
-                        <span>💬</span>
-                        <span>回复</span>
-                    </button>
-                    ${withdrawable ? `
-                    <button class="withdraw-btn flex items-center gap-1 text-gray-600 hover:text-red-500 transition-colors">
-                        <span>🗑️</span>
-                        <span>撤回</span>
-                    </button>
-                    ` : ''}
-                </div>
-                <!-- 回复输入框（默认隐藏） -->
-                <div class="reply-form mt-3 hidden">
-                    <textarea class="reply-content w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                              rows="2" placeholder="回复 @${comment.author}..."></textarea>
-                    <div class="mt-2">
-                        <label class="text-xs text-gray-500">添加附件</label>
-                        <input type="file" class="reply-file-upload hidden" accept="image/*,.pptx,.ppt,.docx,.doc,.txt">
-                        <label for="reply-file-${comment.id}" class="text-xs text-primary cursor-pointer hover:underline">上传文件</label>
-                        <input type="text" class="reply-link ml-2 px-2 py-1 border border-gray-300 rounded text-xs w-48" placeholder="或输入链接">
-                        <input type="file" id="reply-file-${comment.id}" class="reply-file-upload hidden" accept="image/*,.pptx,.ppt,.docx,.doc,.txt">
-                    </div>
-                    <div class="flex gap-2 mt-2">
-                        <button class="submit-reply bg-primary/90 text-white px-3 py-1 rounded-md text-sm hover:bg-primary transition-colors">
-                            回复
-                        </button>
-                        <button class="cancel-reply text-gray-500 px-3 py-1 rounded-md text-sm hover:bg-gray-100 transition-colors">
-                            取消
-                        </button>
-                    </div>
-                </div>
-                <!-- 回复列表 -->
-                <div class="replies mt-4 space-y-2">
-                    ${visibleReplies.map(reply => createCommentElement(reply, true).outerHTML).join('')}
-                    ${hasMoreReplies ? `
-                        <button class="toggle-replies text-sm text-primary mt-1 flex items-center gap-1" data-id="${comment.id}">
-                            <span>⬇️</span>
-                            <span>显示${showAllReplies ? '更少' : '全部'}回复 (${showAllReplies ? 3 : replies.length - 3}条)</span>
-                        </button>
-                    ` : ''}
                 </div>
             `;
-
-            // 绑定回复折叠/展开事件
-            if (hasMoreReplies) {
-                const toggleBtn = div.querySelector('.toggle-replies');
-                toggleBtn.addEventListener('click', function() {
-                    const commentId = this.dataset.id;
-                    toggleRepliesVisibility(commentId);
-                });
+            
+            // 添加事件监听器
+            div.querySelector('.like-button').addEventListener('click', handleLike);
+            div.querySelector('.reply-button').addEventListener('click', toggleReplyForm);
+            
+            if (div.querySelector('.cancel-reply')) {
+                div.querySelector('.cancel-reply').addEventListener('click', toggleReplyForm);
             }
-
-            // 绑定内容折叠/展开事件
-            if (contentNeedsCollapsing) {
-                const toggleBtn = div.querySelector('.toggle-content');
-                toggleBtn.addEventListener('click', function() {
-                    const commentId = this.dataset.id;
-                    toggleContentVisibility(commentId);
-                });
+            
+            if (div.querySelector('.submit-reply')) {
+                div.querySelector('.submit-reply').addEventListener('click', submitReply);
             }
-
+            
+            if (div.querySelector('.report-button')) {
+                div.querySelector('.report-button').addEventListener('click', openReportModal);
+            }
+            
+            if (div.querySelector('.delete-comment-button')) {
+                div.querySelector('.delete-comment-button').addEventListener('click', deleteComment);
+            }
+            
+            if (div.querySelector('.show-more-replies')) {
+                div.querySelector('.show-more-replies').addEventListener('click', toggleShowMoreReplies);
+            }
+            
+            // 图片点击查看
+            const images = div.querySelectorAll('.comment-image');
+            images.forEach(img => {
+                img.addEventListener('click', () => {
+                    document.getElementById('viewer-image').src = img.src;
+                    document.getElementById('image-viewer').classList.add('show');
+                });
+            });
+            
             return div;
         }
 
-        // 内容折叠/展开函数
-        function toggleContentVisibility(commentId) {
-            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
+        function createReplyHtml(reply) {
+            const date = new Date(reply.timestamp);
+            const formattedDate = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
             
-            // 递归查找评论并切换显示状态
-            function findAndToggle(commentList) {
-                for (let comment of commentList) {
-                    if (comment.id === commentId) {
-                        comment.showFullContent = !comment.showFullContent;
-                        return true;
-                    }
-                    if (comment.replies && comment.replies.length > 0) {
-                        if (findAndToggle(comment.replies)) {
-                            return true;
-                        }
-                    }
-                }
-                return false;
-            }
-            
-            findAndToggle(comments);
-            safeSetItem('comments', JSON.stringify(comments));
-            renderComments();
+            return `
+                <div class="reply-indent" data-id="${reply.id}">
+                    <div class="flex items-start gap-2">
+                        <img src="${reply.avatar}" alt="${reply.username}" class="w-8 h-8 rounded-full object-cover">
+                        <div class="flex-1">
+                            <div class="flex items-center justify-between">
+                                <span class="font-medium text-sm">${reply.username}</span>
+                                <span class="text-xs text-gray-500">${formattedDate}</span>
+                            </div>
+                            <p class="mt-0.5 text-gray-700 text-sm">${reply.content}</p>
+                            <div class="mt-1 flex items-center gap-4">
+                                ${currentUser.isAdmin ? `
+                                    <button class="delete-reply-button flex items-center text-xs text-gray-500" data-comment-id="${reply.commentId}" data-reply-id="${reply.id}">
+                                        <i class="fa fa-trash mr-1"></i>
+                                        <span>删除</span>
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
         }
 
-        // 回复折叠/展开函数
-        function toggleRepliesVisibility(commentId) {
-            const comments = JSON.parse(localStorage.getItem('comments') || '[]');
-            
-            // 递归查找评论并切换显示状态
-            function findAndToggle(commentList) {
-                for (let comment of commentList) {
-                    if (comment.id === commentId) {
-                        comment.showAllReplies = !comment.showAllReplies;
-                        return true;
-                    }
-                    if (comment.replies && comment.replies.length > 0) {
-                        if (findAndToggle(comment.replies)) {
-                            return true;
-                        }
-                    }
-                }
-                return false;
-            }
-            
-            findAndToggle(comments);
-            safeSetItem('comments', JSON.stringify(comments));
-            renderComments();
+        function sortComments(type) {
+            sortBy = type;
+            document.getElementById('sort-time').className = type === 'time' ? 
+                'px-3 py-1 bg-primary text-white text-sm' : 
+                'px-3 py-1 bg-gray-100 text-gray-700 text-sm hover:bg-gray-200';
+                
+            document.getElementById('sort-likes').className = type === 'likes' ? 
+                'px-3 py-1 bg-primary text-white text-sm' : 
+                'px-3 py-1 bg-gray-100 text-gray-700 text-sm hover:bg-gray-200';
+                
+            currentPage = 1;
+            loadComments();
         }
 
-        // 压缩图片
-        function compressImage(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
+        function changePage(direction) {
+            currentPage += direction;
+            loadComments();
+            
+            // 滚动到评论区顶部
+            document.getElementById('comments-container').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function handleLike(e) {
+            const commentId = e.currentTarget.dataset.id;
+            const comments = JSON.parse(localStorage.getItem('comments'));
+            const comment = comments.find(c => c.id === commentId);
+            
+            if (!comment) return;
+            
+            const index = comment.likedBy.indexOf(currentUser.id);
+            if (index === -1) {
+                comment.likes++;
+                comment.likedBy.push(currentUser.id);
+            } else {
+                comment.likes--;
+                comment.likedBy.splice(index, 1);
+            }
+            
+            localStorage.setItem('comments', JSON.stringify(comments));
+            loadComments();
+        }
+
+        function toggleReplyForm(e) {
+            const commentId = e.currentTarget.closest('[data-id]').dataset.id;
+            const replyForm = document.querySelector(`.reply-form[data-id="${commentId}"]`);
+            replyForm.classList.toggle('hidden');
+            
+            if (!replyForm.classList.contains('hidden')) {
+                replyForm.querySelector('textarea').focus();
+            }
+        }
+
+        function submitReply(e) {
+            const commentElement = e.currentTarget.closest('[data-id]');
+            const commentId = commentElement.dataset.id;
+            const replyForm = commentElement.querySelector(`.reply-form[data-id="${commentId}"]`);
+            const content = replyForm.querySelector('textarea').value.trim();
+            
+            if (!content) return;
+            
+            const comments = JSON.parse(localStorage.getItem('comments'));
+            const comment = comments.find(c => c.id === commentId);
+            
+            if (!comment) return;
+            
+            const newReply = {
+                id: Date.now().toString(),
+                commentId: commentId,
+                userId: currentUser.id,
+                username: currentUser.username,
+                avatar: currentUser.avatar || DEFAULT_AVATAR,
+                content: content,
+                timestamp: new Date().toISOString()
+            };
+            
+            comment.replies.unshift(newReply);
+            localStorage.setItem('comments', JSON.stringify(comments));
+            
+            replyForm.querySelector('textarea').value = '';
+            replyForm.classList.add('hidden');
+            
+            loadComments();
+        }
+
+        function openReportModal(e) {
+            const commentId = e.currentTarget.dataset.id;
+            const comments = JSON.parse(localStorage.getItem('comments'));
+            const comment = comments.find(c => c.id === commentId);
+            
+            if (!comment) return;
+            
+            document.getElementById('report-comment-content').textContent = comment.content;
+            document.getElementById('report-reason').value = '';
+            document.getElementById('report-modal').dataset.commentId = commentId;
+            document.getElementById('report-modal').classList.add('show');
+            document.getElementById('overlay').classList.add('show');
+        }
+
+        function closeReportModal() {
+            document.getElementById('report-modal').classList.remove('show');
+            document.getElementById('overlay').classList.remove('show');
+        }
+
+        function submitReport() {
+            const commentId = document.getElementById('report-modal').dataset.commentId;
+            const reason = document.getElementById('report-reason').value.trim();
+            
+            if (!reason) {
+                alert('请输入举报原因');
+                return;
+            }
+            
+            const reports = JSON.parse(localStorage.getItem('reports'));
+            const comments = JSON.parse(localStorage.getItem('comments'));
+            const comment = comments.find(c => c.id === commentId);
+            
+            if (!comment) return;
+            
+            reports.push({
+                id: Date.now().toString(),
+                commentId: commentId,
+                commentContent: comment.content,
+                reporterId: currentUser.id,
+                reporterName: currentUser.username,
+                reason: reason,
+                timestamp: new Date().toISOString(),
+                status: 'pending'
+            });
+            
+            localStorage.setItem('reports', JSON.stringify(reports));
+            closeReportModal();
+            alert('举报已提交，等待管理员审核');
+            
+            // 如果是管理员，实时更新举报列表
+            if (currentUser.isAdmin) {
+                loadAdminPanelData();
+            }
+        }
+
+        function handleReportReview(action) {
+            const reportId = document.getElementById('review-report-modal').dataset.reportId;
+            const commentId = document.getElementById('review-report-modal').dataset.commentId;
+            
+            const reports = JSON.parse(localStorage.getItem('reports'));
+            const reportIndex = reports.findIndex(r => r.id === reportId);
+            
+            if (reportIndex === -1) return;
+            
+            reports[reportIndex].status = action;
+            localStorage.setItem('reports', JSON.stringify(reports));
+            
+            // 如果需要删除评论
+            if (action === 'delete') {
+                let comments = JSON.parse(localStorage.getItem('comments'));
+                comments = comments.filter(c => c.id !== commentId);
+                localStorage.setItem('comments', JSON.stringify(comments));
+                loadComments();
+            }
+            
+            document.getElementById('review-report-modal').classList.remove('show');
+            loadAdminPanelData();
+        }
+
+        function deleteComment(e) {
+            if (!confirm('确定要删除这条评论吗？')) return;
+            
+            const commentId = e.currentTarget.dataset.id;
+            let comments = JSON.parse(localStorage.getItem('comments'));
+            comments = comments.filter(c => c.id !== commentId);
+            localStorage.setItem('comments', JSON.stringify(comments));
+            loadComments();
+        }
+
+        function toggleShowMoreReplies(e) {
+            const commentId = e.currentTarget.dataset.id;
+            const repliesContainer = document.querySelector(`.replies[data-id="${commentId}"]`);
+            const button = e.currentTarget;
+            
+            if (repliesContainer.classList.contains('show-all')) {
+                repliesContainer.classList.remove('show-all');
+                const comments = JSON.parse(localStorage.getItem('comments'));
+                const comment = comments.find(c => c.id === commentId);
+                repliesContainer.innerHTML = comment.replies.slice(0, MAX_REPLIES_BEFORE_COLLAPSE).map(reply => createReplyHtml(reply)).join('');
+                button.textContent = `显示全部 ${comment.replies.length} 条回复`;
+            } else {
+                repliesContainer.classList.add('show-all');
+                const comments = JSON.parse(localStorage.getItem('comments'));
+                const comment = comments.find(c => c.id === commentId);
+                repliesContainer.innerHTML = comment.replies.map(reply => createReplyHtml(reply)).join('');
+                button.textContent = '收起回复';
+            }
+        }
+
+        function openAdminPanel() {
+            document.getElementById('admin-panel').classList.add('open');
+            document.getElementById('overlay').classList.add('show');
+            loadAdminPanelData();
+        }
+
+        function closeAdminPanel() {
+            document.getElementById('admin-panel').classList.remove('open');
+            document.getElementById('overlay').classList.remove('show');
+            document.getElementById('review-report-modal').classList.remove('show');
+        }
+
+        function loadAdminPanelData() {
+            const users = JSON.parse(localStorage.getItem('users'));
+            const comments = JSON.parse(localStorage.getItem('comments'));
+            const reports = JSON.parse(localStorage.getItem('reports'));
+            const pendingReports = reports.filter(r => r.status === 'pending');
+            
+            // 更新统计信息
+            document.getElementById('total-users').textContent = Object.keys(users).length;
+            document.getElementById('total-comments').textContent = comments.length;
+            document.getElementById('pending-reports').textContent = pendingReports.length;
+            document.getElementById('online-users').textContent = '1'; // 简化处理，实际应通过后端计算
+            
+            // 加载用户列表
+            const userList = document.getElementById('user-list');
+            userList.innerHTML = '';
+            
+            Object.values(users).forEach(user => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center justify-between p-2 hover:bg-gray-50 rounded';
+                div.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <img src="${user.avatar}" alt="${user.username}" class="w-6 h-6 rounded-full">
+                        <span>${user.username} ${user.isAdmin ? '<span class="admin-badge">管理员</span>' : ''}</span>
+                    </div>
+                    <button class="view-user-details text-xs text-primary" data-id="${user.id}">详情</button>
+                `;
+                userList.appendChild(div);
                 
-                reader.onload = function(e) {
-                    const img = new Image();
-                    img.src = e.target.result;
-                    
-                    img.onload = function() {
-                        // 创建canvas元素
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-                        
-                        // 计算压缩后的尺寸（保持比例）
-                        let width = img.width;
-                        let height = img.height;
-                        const maxDim = 800; // 最大尺寸限制
-                        
-                        if (width > height && width > maxDim) {
-                            height = (height * maxDim) / width;
-                            width = maxDim;
-                        } else if (height > maxDim) {
-                            width = (width * maxDim) / height;
-                            height = maxDim;
-                        }
-                        
-                        canvas.width = width;
-                        canvas.height = height;
-                        
-                        // 绘制图片
-                        ctx.drawImage(img, 0, 0, width, height);
-                        
-                        // 转换为base64，设置质量
-                        canvas.toBlob((blob) => {
-                            const compressedFile = new File([blob], file.name, { 
-                                type: file.type,
-                                lastModified: Date.now()
-                            });
-                            
-                            // 读取压缩后的文件
-                            const compressedReader = new FileReader();
-                            compressedReader.readAsDataURL(compressedFile);
-                            compressedReader.onload = function(event) {
-                                resolve(event.target.result);
-                            };
-                        }, file.type, IMAGE_QUALITY);
-                    };
-                    
-                    img.onerror = function() {
-                        reject('图片加载失败');
-                    };
-                };
+                div.querySelector('.view-user-details').addEventListener('click', () => {
+                    showUserDetails(user.id);
+                });
+            });
+            
+            // 加载举报列表
+            const reportList = document.getElementById('report-list');
+            reportList.innerHTML = '';
+            
+            pendingReports.forEach(report => {
+                const div = document.createElement('div');
+                div.className = 'border-b border-gray-100 pb-2 mb-2 last:border-0 last:mb-0';
+                div.innerHTML = `
+                    <div class="text-sm font-medium">举报 #${report.id.substring(0, 6)}</div>
+                    <div class="text-xs text-gray-600 mt-1">${report.commentContent.substring(0, 50)}${report.commentContent.length > 50 ? '...' : ''}</div>
+                    <div class="flex justify-end mt-1">
+                        <button class="review-report text-xs text-primary" data-id="${report.id}" data-comment-id="${report.commentId}">审核</button>
+                    </div>
+                `;
+                reportList.appendChild(div);
                 
-                reader.onerror = function() {
-                    reject('文件读取失败');
-                };
+                div.querySelector('.review-report').addEventListener('click', (e) => {
+                    const reportId = e.currentTarget.dataset.id;
+                    const commentId = e.currentTarget.dataset.commentId;
+                    const report = reports.find(r => r.id === reportId);
+                    
+                    document.getElementById('review-comment-content').textContent = report.commentContent;
+                    document.getElementById('review-report-reason').textContent = report.reason;
+                    document.getElementById('review-reporter').textContent = report.reporterName;
+                    document.getElementById('review-report-modal').dataset.reportId = reportId;
+                    document.getElementById('review-report-modal').dataset.commentId = commentId;
+                    document.getElementById('review-report-modal').classList.add('show');
+                });
+            });
+            
+            // 加载公告内容
+            document.getElementById('announcement-content').value = localStorage.getItem('announcement') || '';
+        }
+
+        function showUserDetails(userId) {
+            const users = JSON.parse(localStorage.getItem('users'));
+            const user = users[userId];
+            const bannedUsers = JSON.parse(localStorage.getItem('bannedUsers'));
+            const isBanned = bannedUsers.some(u => u.id === userId);
+            
+            if (!user) return;
+            
+            const comments = JSON.parse(localStorage.getItem('comments'));
+            const userComments = comments.filter(c => c.userId === userId).length;
+            
+            document.getElementById('user-modal-title').textContent = `${user.username} 的详情`;
+            document.getElementById('user-modal-content').innerHTML = `
+                <div class="flex flex-col items-center mb-4">
+                    <img src="${user.avatar}" alt="${user.username}" class="w-20 h-20 rounded-full mb-2">
+                    <div class="font-medium">${user.username}</div>
+                    <div class="text-sm text-gray-500">ID: ${user.id}</div>
+                </div>
+                <div class="space-y-2 text-sm">
+                    <div><span class="text-gray-500">注册时间:</span> ${new Date(user.joinDate).toLocaleString()}</div>
+                    <div><span class="text-gray-500">评论数:</span> ${userComments}</div>
+                    <div><span class="text-gray-500">角色:</span> ${user.isAdmin ? '管理员' : '普通用户'}</div>
+                    <div><span class="text-gray-500">状态:</span> ${isBanned ? '<span class="text-danger">已禁言</span>' : '<span class="text-success">正常</span>'}</div>
+                </div>
+                <div class="mt-4 flex justify-end gap-2">
+                    ${!user.isAdmin ? `
+                        <button id="toggle-ban-user" class="px-3 py-1 ${isBanned ? 'bg-success' : 'bg-danger'} text-white rounded text-sm">
+                            ${isBanned ? '解除禁言' : '禁言用户'}
+                        </button>
+                    ` : ''}
+                    <button id="close-user-modal" class="px-3 py-1 border rounded text-sm">关闭</button>
+                </div>
+            `;
+            
+            document.getElementById('user-modal').classList.add('show');
+            document.getElementById('overlay').classList.add('show');
+            
+            // 禁言/解除禁言按钮事件
+            if (document.getElementById('toggle-ban-user')) {
+                document.getElementById('toggle-ban-user').addEventListener('click', () => {
+                    toggleUserBanStatus(userId);
+                    document.getElementById('user-modal').classList.remove('show');
+                    loadAdminPanelData();
+                    loadBannedUsers();
+                    loadComments();
+                });
+            }
+            
+            document.getElementById('close-user-modal').addEventListener('click', () => {
+                document.getElementById('user-modal').classList.remove('show');
             });
         }
 
-        // 处理文件上传
-        function handleFileUpload(file) {
-            return new Promise((resolve, reject) => {
-                // 检查文件大小
-                if (file.size > MAX_FILE_SIZE) {
-                    reject(`文件大小不能超过${MAX_FILE_SIZE / (1024 * 1024)}MB`);
-                    return;
-                }
-                
-                // 对于图片，压缩后转为dataURL
-                if (file.type.startsWith('image/')) {
-                    // 如果图片过大，先压缩
-                    if (file.size > MAX_IMAGE_SIZE) {
-                        compressImage(file)
-                            .then(compressedDataUrl => {
-                                resolve({
-                                    type: 'file',
-                                    name: file.name,
-                                    mimeType: file.type,
-                                    url: compressedDataUrl
-                                });
-                            })
-                            .catch(error => {
-                                reject(`图片处理失败: ${error}`);
-                            });
+        function toggleUserBanStatus(userId) {
+            let bannedUsers = JSON.parse(localStorage.getItem('bannedUsers'));
+            const index = bannedUsers.findIndex(u => u.id === userId);
+            
+            if (index === -1) {
+                // 禁言用户
+                const users = JSON.parse(localStorage.getItem('users'));
+                const user = users[userId];
+                bannedUsers.push({
+                    id: userId,
+                    username: user.username,
+                    bannedAt: new Date().toISOString()
+                });
+            } else {
+                // 解除禁言
+                bannedUsers.splice(index, 1);
+            }
+            
+            localStorage.setItem('bannedUsers', JSON.stringify(bannedUsers));
+        }
+
+        function saveAnnouncement() {
+            const content = document.getElementById('announcement-content').value.trim();
+            localStorage.setItem('announcement', content);
+            loadAnnouncement();
+            alert('公告已保存');
+        }
+
+        function deleteAnnouncement() {
+            if (confirm('确定要删除公告吗？')) {
+                localStorage.setItem('announcement', '');
+                document.getElementById('announcement-content').value = '';
+                loadAnnouncement();
+            }
+        }
+
+        function loadAnnouncement() {
+            const announcement = localStorage.getItem('announcement');
+            const container = document.getElementById('announcement');
+            
+            if (announcement) {
+                document.getElementById('announcement-text').textContent = announcement;
+                container.classList.remove('hidden');
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+
+        function loadBannedUsers() {
+            const bannedUsers = JSON.parse(localStorage.getItem('bannedUsers'));
+            const container = document.getElementById('banned-users-section');
+            const list = document.getElementById('banned-users-list');
+            
+            if (bannedUsers.length > 0) {
+                list.innerHTML = bannedUsers.map(user => `
+                    <div class="flex items-center justify-between py-1">
+                        <span class="banned-user">${user.username}</span>
+                        <span class="text-xs text-gray-500">${new Date(user.bannedAt).toLocaleString()}</span>
+                    </div>
+                `).join('');
+                container.classList.remove('hidden');
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+
+        function handleAvatarUpload(e) {
+            handleAvatarFile(e.target.files[0], (url) => {
+                updateUserAvatar(url);
+            });
+        }
+
+        function handleAvatarUploadModal(e) {
+            handleAvatarFile(e.target.files[0], (url) => {
+                document.getElementById('avatar-preview').src = url;
+            });
+        }
+
+        function handleAvatarFile(file, callback) {
+            if (!file) return;
+            
+            if (!file.type.startsWith('image/')) {
+                alert('请上传图片文件');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    // 压缩图片
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    // 保持比例缩放，最大尺寸200x200
+                    const maxSize = 200;
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    if (width > height) {
+                        if (width > maxSize) {
+                            height = height * (maxSize / width);
+                            width = maxSize;
+                        }
                     } else {
-                        const reader = new FileReader();
-                        reader.onload = function(e) {
-                            resolve({
-                                type: 'file',
-                                name: file.name,
-                                mimeType: file.type,
-                                url: e.target.result
-                            });
-                        };
-                        reader.onerror = function() {
-                            reject('图片读取失败，请重试');
-                        };
-                        reader.readAsDataURL(file);
+                        if (height > maxSize) {
+                            width = width * (maxSize / height);
+                            height = maxSize;
+                        }
                     }
-                } else {
-                    // 对于文档，仅保存文件名和类型
-                    resolve({
-                        type: 'file',
-                        name: file.name,
-                        mimeType: file.type,
-                        url: '#file-' + generateId()
-                    });
-                }
-            });
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    // 转换为base64
+                    const dataUrl = canvas.toDataURL(file.type, IMAGE_QUALITY);
+                    callback(dataUrl);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
         }
 
-        // 发布评论
-        async function publishComment() {
-            // 清除之前的错误提示
-            document.getElementById('content-error').classList.add('hidden');
+        function updateUserAvatar(url) {
+            currentUser.avatar = url;
+            
+            const users = JSON.parse(localStorage.getItem('users'));
+            users[currentUser.id] = currentUser;
+            localStorage.setItem('users', JSON.stringify(users));
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            
+            document.getElementById('user-avatar').src = url;
+            loadComments();
+        }
+
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            const preview = document.getElementById('file-preview');
+            
+            if (!file) {
+                preview.classList.add('hidden');
+                return;
+            }
+            
+            if (file.size > MAX_FILE_SIZE) {
+                document.getElementById('file-error').textContent = '文件大小不能超过10MB';
+                document.getElementById('file-error').classList.remove('hidden');
+                return;
+            }
+            
             document.getElementById('file-error').classList.add('hidden');
-            document.getElementById('posting-status').classList.add('hidden');
             
-            const content = document.getElementById('comment-content').value;
-            const link = document.getElementById('link-upload').value.trim();
-            const fileInput = document.getElementById('file-upload');
-            
-            // 验证评论内容
-            if (!content.trim()) {
-                document.getElementById('content-error').classList.remove('hidden');
-                return false;
-            }
-
-            // 检查防刷屏限制
-            const postCheck = canPostComment();
-            if (!postCheck.canPost) {
-                const statusEl = document.getElementById('posting-status');
-                statusEl.textContent = `评论过于频繁，请等待${postCheck.waitTime}秒后再试`;
-                statusEl.classList.remove('hidden');
-                return false;
-            }
-
-            try {
-                const attachments = [];
-                
-                // 处理文件上传
-                if (fileInput.files.length > 0) {
-                    try {
-                        const fileData = await handleFileUpload(fileInput.files[0]);
-                        attachments.push(fileData);
-                    } catch (error) {
-                        document.getElementById('file-error').textContent = error;
-                        document.getElementById('file-error').classList.remove('hidden');
-                        return false;
-                    }
-                }
-                
-                // 处理链接
-                if (link) {
-                    attachments.push({
-                        type: 'link',
-                        url: link
-                    });
-                }
-
-                const comments = JSON.parse(localStorage.getItem('comments') || '[]');
-                const newComment = {
-                    id: generateId(),
-                    content: content.trim(),
-                    author: currentUser.username,
-                    avatar: currentUser.avatar,
-                    time: getCurrentTime(),
-                    likes: 0,
-                    isLiked: false,
-                    replies: [],
-                    showAllReplies: false,
-                    showFullContent: false,
-                    attachments: attachments || []
-                };
-
-                // 添加新评论到开头
-                comments.unshift(newComment);
-                
-                // 限制评论总数
-                if (comments.length > MAX_COMMENTS) {
-                    comments.pop(); // 移除最旧的评论
-                }
-
-                // 尝试保存评论
-                const saveSuccess = safeSetItem('comments', JSON.stringify(comments));
-                if (!saveSuccess) {
-                    throw new Error('存储空间不足，无法发布评论');
-                }
-                
-                // 记录评论时间
-                recordCommentTime();
-                
-                currentPage = 1;
-                renderComments();
-
-                // 清空输入框
-                document.getElementById('comment-content').value = '';
-                document.getElementById('link-upload').value = '';
-                document.getElementById('file-preview').classList.add('hidden');
-                fileInput.value = '';
-                
-                return true;
-            } catch (error) {
-                console.error('发布评论失败:', error);
-                const statusEl = document.getElementById('posting-status');
-                statusEl.textContent = error.message;
-                statusEl.classList.remove('hidden');
-                return false;
-            }
-        }
-
-        // 发布回复
-        async function publishReply(commentId, content, attachments) {
-            if (!content.trim()) {
-                alert('请输入回复内容');
-                return;
-            }
-
-            // 检查防刷屏限制
-            const postCheck = canPostComment();
-            if (!postCheck.canPost) {
-                alert(`评论过于频繁，请等待${postCheck.waitTime}秒后再试`);
-                return;
-            }
-
-            try {
-                const comments = JSON.parse(localStorage.getItem('comments') || '[]');
-                const newReply = {
-                    id: generateId(),
-                    content: content.trim(),
-                    author: currentUser.username,
-                    avatar: currentUser.avatar,
-                    time: getCurrentTime(),
-                    likes: 0,
-                    isLiked: false,
-                    replies: [],
-                    showAllReplies: false,
-                    showFullContent: false,
-                    attachments: attachments || []
-                };
-
-                // 递归查找评论并添加回复
-                function findAndAddReply(commentList) {
-                    for (let i = 0; i < commentList.length; i++) {
-                        if (commentList[i].id === commentId) {
-                            commentList[i].replies.unshift(newReply);
-                            return true;
-                        }
-                        if (commentList[i].replies && commentList[i].replies.length > 0 && findAndAddReply(commentList[i].replies)) {
-                            return true;
-                        }
-                    }
-                    return false;
-                }
-
-                findAndAddReply(comments);
-                
-                // 限制评论总数
-                if (comments.length > MAX_COMMENTS) {
-                    comments.pop(); // 移除最旧的评论
-                }
-
-                // 尝试保存评论
-                const saveSuccess = safeSetItem('comments', JSON.stringify(comments));
-                if (!saveSuccess) {
-                    throw new Error('存储空间不足，无法发布回复');
-                }
-                
-                // 记录评论时间
-                recordCommentTime();
-                
-                renderComments();
-            } catch (error) {
-                console.error('发布回复失败:', error);
-                alert(error.message);
-            }
-        }
-
-        // 点赞功能
-        function toggleLike(commentId) {
-            try {
-                const comments = JSON.parse(localStorage.getItem('comments') || '[]');
-
-                function findAndToggleLike(commentList) {
-                    for (let comment of commentList) {
-                        if (comment.id === commentId) {
-                            comment.likes += comment.isLiked ? -1 : 1;
-                            comment.isLiked = !comment.isLiked;
-                            return true;
-                        }
-                        if (comment.replies && comment.replies.length > 0 && findAndToggleLike(comment.replies)) {
-                            return true;
-                        }
-                    }
-                    return false;
-                }
-
-                findAndToggleLike(comments);
-                safeSetItem('comments', JSON.stringify(comments));
-                renderComments();
-            } catch (error) {
-                console.error('点赞失败:', error);
-                alert('操作失败，请稍后重试');
-            }
-        }
-
-        // 撤回评论/回复功能
-        function withdrawComment(commentId) {
-            if (!confirm('确定要撤回这条评论吗？')) {
-                return;
-            }
-
-            try {
-                const comments = JSON.parse(localStorage.getItem('comments') || '[]');
-
-                function findAndRemoveComment(commentList) {
-                    for (let i = 0; i < commentList.length; i++) {
-                        if (commentList[i].id === commentId) {
-                            commentList.splice(i, 1);
-                            return true;
-                        }
-                        if (commentList[i].replies && commentList[i].replies.length > 0 && findAndRemoveComment(commentList[i].replies)) {
-                            return true;
-                        }
-                    }
-                    return false;
-                }
-
-                findAndRemoveComment(comments);
-                safeSetItem('comments', JSON.stringify(comments));
-                
-                // 调整当前页
-                const totalPages = getTotalPages();
-                if (currentPage > totalPages && totalPages > 0) {
-                    currentPage = totalPages;
-                }
-                
-                renderComments();
-            } catch (error) {
-                console.error('撤回评论失败:', error);
-                alert('操作失败，请稍后重试');
-            }
-        }
-
-        // 更换头像
-        function changeAvatar(file) {
-            return new Promise((resolve, reject) => {
-                if (!file.type.startsWith('image/')) {
-                    reject('请上传图片文件');
-                    return;
-                }
-                
-                // 限制头像大小
-                if (file.size > MAX_IMAGE_SIZE) {
-                    // 压缩头像
-                    compressImage(file)
-                        .then(compressedDataUrl => {
-                            currentUser.avatar = compressedDataUrl;
-                            saveUserData(currentUser);
-                            updateUserDisplay();
-                            resolve();
-                        })
-                        .catch(error => {
-                            reject(`头像处理失败: ${error}`);
-                        });
-                } else {
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        currentUser.avatar = e.target.result;
-                        saveUserData(currentUser);
-                        updateUserDisplay();
-                        resolve();
-                    };
-                    reader.onerror = function() {
-                        reject('头像读取失败，请重试');
-                    };
-                    reader.readAsDataURL(file);
-                }
-            });
-        }
-
-        // 修改昵称
-        function changeUsername(newName) {
-            if (!newName || !newName.trim()) {
-                alert('请输入有效的昵称');
-                return false;
-            }
-            
-            currentUser.username = newName.trim();
-            saveUserData(currentUser);
-            updateUserDisplay();
-            return true;
-        }
-
-        // 事件监听
-        document.addEventListener('DOMContentLoaded', () => {
-            // 初始化用户显示
-            updateUserDisplay();
-            
-            // 初始渲染评论
-            renderComments();
-
-            // 发布评论按钮
-            document.getElementById('submit-comment').addEventListener('click', publishComment);
-            
-            // 添加键盘事件支持
-            document.getElementById('comment-content').addEventListener('keydown', (e) => {
-                // Ctrl+Enter 发布评论
-                if (e.ctrlKey && e.key === 'Enter') {
-                    e.preventDefault();
-                    publishComment();
-                }
-            });
-
-            // 文件上传预览
-            document.getElementById('file-upload').addEventListener('change', async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                
-                try {
-                    const fileData = await handleFileUpload(file);
-                    const previewEl = document.getElementById('file-preview');
-                    
-                    // 图片预览处理
-                    let previewContent = '';
-                    if (fileData.mimeType.startsWith('image/')) {
-                        previewContent = `
-                            <div class="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                                <img src="${fileData.url}" alt="预览" class="w-16 h-16 object-cover rounded image-loading"
-                                    onload="this.classList.remove('image-loading')"
-                                    onerror="this.src='${DEFAULT_AVATAR}'; this.classList.remove('image-loading')">
-                                <div class="flex-1">
-                                    <div class="text-sm">${fileData.name}</div>
-                                    <button id="remove-file" class="text-xs text-red-500 hover:underline">移除</button>
-                                </div>
+            // 对于图片，显示预览
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <i class="fa fa-file-image-o text-primary mr-2"></i>
+                                <span class="text-sm">${file.name}</span>
                             </div>
-                        `;
-                    } else {
-                        previewContent = `
-                            <div class="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                                <span class="text-gray-500">📄</span>
-                                <div class="flex-1">
-                                    <div class="text-sm">${fileData.name}</div>
-                                    <button id="remove-file" class="text-xs text-red-500 hover:underline">移除</button>
-                                </div>
-                            </div>
-                        `;
-                    }
+                            <button id="remove-file" class="text-gray-500 hover:text-danger">
+                                <i class="fa fa-times"></i>
+                            </button>
+                        </div>
+                        <img src="${e.target.result}" alt="${file.name}" class="max-w-full max-h-32 mt-2 rounded">
+                    `;
+                    preview.dataset.filename = file.name;
+                    preview.dataset.fileurl = e.target.result;
+                    preview.dataset.filetype = file.type;
+                    preview.classList.remove('hidden');
+                    preview.classList.add('show');
                     
-                    previewEl.innerHTML = previewContent;
-                    previewEl.classList.remove('hidden');
-                    
-                    // 移除文件
                     document.getElementById('remove-file').addEventListener('click', () => {
-                        previewEl.classList.add('hidden');
                         document.getElementById('file-upload').value = '';
+                        preview.classList.add('hidden');
+                        preview.classList.remove('show');
                     });
-                } catch (error) {
-                    document.getElementById('file-error').textContent = error;
-                    document.getElementById('file-error').classList.remove('hidden');
-                }
-            });
+                };
+                reader.readAsDataURL(file);
+            } else {
+                // 非图片文件，只显示文件名
+                preview.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <i class="fa fa-file-o text-gray-500 mr-2"></i>
+                            <span class="text-sm">${file.name}</span>
+                        </div>
+                        <button id="remove-file" class="text-gray-500 hover:text-danger">
+                            <i class="fa fa-times"></i>
+                        </button>
+                    </div>
+                `;
+                preview.dataset.filename = file.name;
+                preview.dataset.fileurl = '#'; // 实际应用中应上传到服务器获取URL
+                preview.dataset.filetype = file.type;
+                preview.classList.remove('hidden');
+                preview.classList.add('show');
+                
+                document.getElementById('remove-file').addEventListener('click', () => {
+                    document.getElementById('file-upload').value = '';
+                    preview.classList.add('hidden');
+                    preview.classList.remove('show');
+                });
+            }
+        }
 
-            // 分页按钮事件
-            document.getElementById('prev-page').addEventListener('click', () => {
-                if (currentPage > 1) {
-                    currentPage--;
-                    renderComments();
-                }
-            });
+        function closeImageViewer() {
+            document.getElementById('image-viewer').classList.remove('show');
+        }
 
-            document.getElementById('next-page').addEventListener('click', () => {
-                const totalPages = getTotalPages();
-                if (currentPage < totalPages) {
-                    currentPage++;
-                    renderComments();
-                }
-            });
-
-            // 头像上传
-            document.getElementById('avatar-upload').addEventListener('change', async (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    try {
-                        await changeAvatar(file);
-                        alert('头像更新成功');
-                    } catch (error) {
-                        alert(error);
-                    }
-                    e.target.value = '';
-                }
-            });
-
-            // 修改昵称相关事件
-            document.getElementById('change-username').addEventListener('click', () => {
-                document.getElementById('username-modal').classList.remove('hidden');
-                document.getElementById('new-username').value = currentUser.username;
-            });
-
-            document.getElementById('cancel-username').addEventListener('click', () => {
-                document.getElementById('username-modal').classList.add('hidden');
-            });
-
-            document.getElementById('confirm-username').addEventListener('click', () => {
-                const newName = document.getElementById('new-username').value;
-                if (changeUsername(newName)) {
-                    document.getElementById('username-modal').classList.add('hidden');
-                }
-            });
-
-            // 点击事件委托
-            const commentsContainer = document.getElementById('comments-container');
-            
-            // 点赞按钮事件
-            commentsContainer.addEventListener('click', (e) => {
-                const likeBtn = e.target.closest('.like-btn');
-                if (likeBtn) {
-                    const commentId = likeBtn.dataset.id;
-                    toggleLike(commentId);
-                }
-            });
-            
-            // 回复按钮事件
-            commentsContainer.addEventListener('click', (e) => {
-                const replyBtn = e.target.closest('.reply-btn');
-                if (replyBtn) {
-                    const commentEl = replyBtn.closest('[data-id]');
-                    const replyForm = commentEl.querySelector('.reply-form');
-                    // 隐藏其他所有回复框
-                    document.querySelectorAll('.reply-form').forEach(form => {
-                        if (form !== replyForm) form.classList.add('hidden');
-                    });
-                    // 切换当前回复框显示状态
-                    replyForm.classList.toggle('hidden');
-                }
-            });
-            
-            // 取消回复事件
-            commentsContainer.addEventListener('click', (e) => {
-                const cancelBtn = e.target.closest('.cancel-reply');
-                if (cancelBtn) {
-                    cancelBtn.closest('.reply-form').classList.add('hidden');
-                }
-            });
-            
-            // 回复文件上传
-            commentsContainer.addEventListener('change', async (e) => {
-                const fileInput = e.target.closest('.reply-file-upload');
-                if (fileInput && fileInput.files.length > 0) {
-                    try {
-                        const fileData = await handleFileUpload(fileInput.files[0]);
-                        const replyForm = fileInput.closest('.reply-form');
-                        replyForm.dataset.attachment = JSON.stringify([fileData]);
-                        alert('文件已添加');
-                    } catch (error) {
-                        alert(error);
-                    }
-                    fileInput.value = '';
-                }
-            });
-            
-            // 提交回复事件
-            commentsContainer.addEventListener('click', async (e) => {
-                const submitReplyBtn = e.target.closest('.submit-reply');
-                if (submitReplyBtn) {
-                    const replyForm = submitReplyBtn.closest('.reply-form');
-                    const commentEl = replyForm.closest('[data-id]');
-                    const commentId = commentEl.dataset.id;
-                    const content = replyForm.querySelector('.reply-content').value;
-                    const link = replyForm.querySelector('.reply-link').value.trim();
-                    
-                    const attachments = [];
-                    
-                    // 获取文件附件
-                    if (replyForm.dataset.attachment) {
-                        attachments.push(...JSON.parse(replyForm.dataset.attachment));
-                        delete replyForm.dataset.attachment;
-                    }
-                    
-                    // 处理链接
-                    if (link) {
-                        attachments.push({
-                            type: 'link',
-                            url: link
-                        });
-                    }
-
-                    await publishReply(commentId, content, attachments);
-                    replyForm.classList.add('hidden');
-                    replyForm.querySelector('.reply-content').value = '';
-                    replyForm.querySelector('.reply-link').value = '';
-                }
-            });
-            
-            // 撤回按钮事件
-            commentsContainer.addEventListener('click', (e) => {
-                const withdrawBtn = e.target.closest('.withdraw-btn');
-                if (withdrawBtn) {
-                    const commentEl = withdrawBtn.closest('[data-id]');
-                    const commentId = commentEl.dataset.id;
-                    withdrawComment(commentId);
-                }
-            });
-        });
+        // 初始化应用
+        window.addEventListener('DOMContentLoaded', initApp);
     </script>
 </body>
 </html>
